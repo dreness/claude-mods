@@ -1,0 +1,25 @@
+{
+  "name": "early-compact",
+  "version": "0.1.0",
+  "description": "Compacts the conversation while a slow backgrounded command runs, ahead of the auto-compact threshold.",
+  "author": {
+    "name": "Andre LaBranche"
+  },
+  "license": "MIT",
+  "userConfig": {
+    "threshold": {
+      "type": "number",
+      "title": "Threshold (%)",
+      "description": "Context fullness at which the tool schedules a compaction.",
+      "default": 60,
+      "min": 1,
+      "max": 95
+    },
+    "nudge": {
+      "type": "boolean",
+      "title": "Missed-chance toast",
+      "description": "Toast when a foreground Bash call with a 30s+ timeout runs above the threshold.",
+      "default": true
+    }
+  }
+}

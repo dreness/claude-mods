@@ -1,0 +1,14 @@
+{
+  "name": "claude-mods",
+  "description": "Claude Code mods by Andre LaBranche.",
+  "owner": {
+    "name": "Andre LaBranche"
+  },
+  "plugins": [
+    {
+      "name": "early-compact",
+      "source": "./plugins/early-compact",
+      "description": "Compacts the conversation while a slow backgrounded command runs, ahead of the auto-compact threshold."
+    }
+  ]
+}
