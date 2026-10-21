@@ -1,6 +1,6 @@
 {
   "name": "early-compact",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Compacts the conversation while a slow backgrounded command runs, ahead of the auto-compact threshold.",
   "author": {
     "name": "Andre LaBranche"
@@ -18,7 +18,7 @@
     "nudge": {
       "type": "boolean",
       "title": "Missed-chance toast",
-      "description": "Toast when a foreground Bash call with a 30s+ timeout runs above the threshold.",
+      "description": "Toast when a foreground Bash call takes 15s+ above the threshold. The model is reminded either way.",
       "default": true
     }
   }

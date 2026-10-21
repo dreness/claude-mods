@@ -8,7 +8,9 @@ const TURN = { answer: 'waiting', durationMs: 1, isAborted: false, turnId: 't1',
 type Outcome = 'ok' | 'skip' | 'reject'
 
 // Stands for the engine. `outcomes` answers each compact() in turn; the last repeats.
-function world(on: On, percent: number, outcomes: Outcome[] = ['ok']) {
+// `toolMs` is how long each tool call takes; `usage.percent` can be changed between calls.
+function world(on: On, percent: number, outcomes: Outcome[] = ['ok'], toolMs = 0) {
+  const usage = { percent }
   const compactions: (string | undefined)[] = []
   const toasts: string[] = []
   const registered: string[] = []
@@ -18,9 +20,12 @@ function world(on: On, percent: number, outcomes: Outcome[] = ['ok']) {
     registered.push(e.name)
     return { value: { tool: `mcp__early-compact__${e.name}` } }
   })
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent }, rateLimits: [] } }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: usage.percent }, rateLimits: [] } }))
   on('turn.complete', ($, e) => ({ text: e.answer }))
-  on('tool.call', () => ({ result: {} }))
+  on('tool.call', async () => {
+    if (toolMs > 0) await clock.set(clock.now() + toolMs)
+    return { result: {} }
+  })
   on('session.compact', ($, e) => {
     compactions.push(e.instructions)
     const o = outcomes[Math.min(compactions.length - 1, outcomes.length - 1)]
@@ -33,7 +38,7 @@ function world(on: On, percent: number, outcomes: Outcome[] = ['ok']) {
     toasts.push(e.text)
     return { value: undefined }
   })
-  return { clock, compactions, toasts, registered }
+  return { clock, compactions, toasts, registered, usage }
 }
 
 describe('scheduling', () => {
@@ -192,27 +197,72 @@ describe('when compact() fails', () => {
   })
 })
 
-describe('missed-chance toast', () => {
-  test('a slow foreground Bash above the threshold toasts', async ($, on) => {
-    const { toasts } = world(on, 70)
+describe('guidance above the threshold', () => {
+  test('the first tool call above the threshold carries a reminder, once', async ($, on) => {
+    const { usage } = world(on, 70)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'make', timeout: 600_000 })
-    expect(toasts).toEqual(['early-compact: missed chance, foreground Bash at 70% context'])
+    const r1 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r1.context?.[0]).toContain('run_in_background: true')
+    const r2 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r2.context).toBeUndefined()
+
+    usage.percent = 20
+    const r3 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r3.context).toBeUndefined()
+    usage.percent = 65
+    const r4 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r4.context?.[0]).toContain('65% full')
+  })
+
+  test('below the threshold there is no reminder', async ($, on) => {
+    world(on, 20)
+    await $.session.start(START)
+    const r = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r.context).toBeUndefined()
+  })
+
+  test('subagent calls carry no reminder', async ($, on) => {
+    world(on, 70)
+    await $.session.start(START)
+    const r = await $.tool.call({ tool: 'mcp__other__x', agentId: 'a1' })
+    expect(r.context).toBeUndefined()
+  })
+})
+
+describe('missed chance', () => {
+  test('a slow foreground Bash above the threshold toasts and tells the model', async ($, on) => {
+    const { toasts } = world(on, 70, ['ok'], 20_000)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    const r = await $.tool.call({ tool: 'Bash', command: 'make' })
+    expect(r.context?.[0]).toContain('ran 20s in the foreground')
+    expect(toasts).toEqual(['early-compact: missed chance, 20s foreground Bash at 70% context'])
   })
 
   test('background or quick calls do not', async ($, on) => {
-    const { toasts } = world(on, 70)
+    const { toasts } = world(on, 70, ['ok'], 20_000)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'make', timeout: 600_000, run_in_background: true })
-    await $.tool.call({ tool: 'Bash', command: 'ls', timeout: 5_000 })
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.tool.call({ tool: 'Bash', command: 'make', run_in_background: true })
+    const r = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r.context).toBeUndefined()
     expect(toasts).toEqual([])
   })
 
-  test('the nudge option turns it off', { options: { nudge: false } }, async ($, on) => {
-    const { toasts } = world(on, 70)
+  test('quick foreground calls do not', async ($, on) => {
+    const { toasts } = world(on, 70, ['ok'], 5_000)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'make', timeout: 600_000 })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const r = await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(r.context).toBeUndefined()
+    expect(toasts).toEqual([])
+  })
+
+  test('the nudge option turns the toast off, not the guidance', { options: { nudge: false } }, async ($, on) => {
+    const { toasts } = world(on, 70, ['ok'], 20_000)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    const r = await $.tool.call({ tool: 'Bash', command: 'make' })
+    expect(r.context?.[0]).toContain('in the foreground')
     expect(toasts).toEqual([])
   })
 })
