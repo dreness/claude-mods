@@ -11,14 +11,16 @@ A Claude Code plugin marketplace of mods (hooks-module plugins).
 At the prompt of a terminal session:
 
 ```
-/plugin install <mod> --marketplace dreness/claude-mods
+/plugin install early-compact --marketplace dreness/claude-mods
 ```
 
 Answer `y` to add the marketplace, then pick a scope. From a shell:
 
 ```
-claude plugin install <mod> --marketplace dreness/claude-mods
+claude plugin install early-compact --marketplace dreness/claude-mods
 ```
+
+For another mod, replace `early-compact` with its name from the table above.
 
 In the desktop app: click + next to the prompt box, then Plugins, Add marketplace with `dreness/claude-mods`, then Add plugin.
 
