@@ -15,6 +15,7 @@ Details:
 - A turn that ends aborted or with an error drops the schedule: you are back at the keyboard, so the conversation is left alone.
 - Subagents can't use the tool, get no reminders, and their turn ends don't trigger the compaction.
 - A later call replaces the instructions from an earlier one.
+- If the conversation is compacted some other way before the scheduled compaction runs (auto-compact, `/compact`, another plugin), the schedule is dropped.
 - If a background task finishes before the turn ends, its notice starts a new turn right away. Compaction then happens when that turn ends instead.
 - A status line entry shows while compacting. A toast reports when compaction is done, skipped or abandoned.
 

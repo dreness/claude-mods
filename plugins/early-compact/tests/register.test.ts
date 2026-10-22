@@ -3,6 +3,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 
 const TOOL = 'mcp__early-compact__compact_while_waiting'
 const START = { cwd: '/w', surface: 'terminal', isInteractive: true } as const
+const AUTO = { trigger: 'auto', messages: [{ role: 'user', text: 'hi', toolUses: [] }], instructions: 'auto' } as const
 const TURN = { answer: 'waiting', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as const
 
 type Outcome = 'ok' | 'skip' | 'reject'
@@ -93,6 +94,41 @@ describe('scheduling', () => {
     await $.turn.complete(TURN)
     await clock.settle()
     expect(compactions).toEqual(['second'])
+  })
+})
+
+describe('another compaction first', () => {
+  test('a compaction between scheduling and turn end drops the schedule', async ($, on) => {
+    const { clock, compactions, toasts } = world(on, 80)
+    await $.session.start(START)
+    await $.tool.call({ tool: TOOL, instructions: 'x' })
+    await $.session.compact(AUTO)
+    await $.turn.complete(TURN)
+    await clock.advance(10_000)
+    expect(compactions).toEqual(['auto'])
+    expect(toasts).toEqual(['early-compact: skipped (already compacted)'])
+  })
+
+  test('a compaction while retrying stops the retries', async ($, on) => {
+    const { clock, compactions } = world(on, 80, ['reject', 'ok'])
+    await $.session.start(START)
+    await $.tool.call({ tool: TOOL, instructions: 'x' })
+    await $.turn.complete(TURN)
+    await clock.advance(0)
+    expect(compactions).toEqual(['x'])
+    await $.session.compact(AUTO)
+    await clock.advance(10_000)
+    expect(compactions).toEqual(['x', 'auto'])
+  })
+
+  test('a skipped compaction does not count', async ($, on) => {
+    const { clock, compactions } = world(on, 80, ['skip', 'ok'])
+    await $.session.start(START)
+    await $.tool.call({ tool: TOOL, instructions: 'x' })
+    await $.session.compact(AUTO)
+    await $.turn.complete(TURN)
+    await clock.settle()
+    expect(compactions).toEqual(['auto', 'x'])
   })
 })
 

@@ -23,14 +23,16 @@ const reminder = (percent: number) =>
 const missed = (seconds: number) =>
   `That command ran ${seconds}s in the foreground with context above the compaction threshold. Run commands like it with run_in_background: true and call ${NAME}.`
 
-type Pending = { instructions: string; rearms: number }
+// epoch: State.compactions when scheduled; a compaction since then makes this one redundant.
+type Pending = { instructions: string; rearms: number; epoch: number }
 // reminded: the model was told to background slow commands since context last crossed the threshold.
-type State = { pending?: Pending; reminded?: boolean }
+// compactions: main-conversation compactions seen, from any trigger.
+type State = { pending?: Pending; reminded?: boolean; compactions: number }
 
 export const register: Register = (on, options) => {
   const threshold = typeof options.threshold === 'number' ? options.threshold : DEFAULT_THRESHOLD
   const nudge = options.nudge !== false
-  const state: State = {}
+  const state: State = { compactions: 0 }
 
   on('session.start', async ($, e, next) => {
     await $.tool.register({
@@ -58,16 +60,31 @@ export const register: Register = (on, options) => {
     if (percent < threshold) {
       return { result: `Context is ${percent}% full (threshold ${threshold}%); compaction not needed. Carry on.` }
     }
-    state.pending = { instructions: String((e as { instructions?: unknown }).instructions ?? ''), rearms: 0 }
+    state.pending = {
+      instructions: String((e as { instructions?: unknown }).instructions ?? ''),
+      rearms: 0,
+      epoch: state.compactions,
+    }
     return {
       result: `Context is ${percent}% full. Compaction is scheduled for when this turn ends. End your turn now; do not poll the background task.`,
     }
   }).catch(() => ({ result: 'early-compact failed; carry on without it.' }))
 
+  // Auto-compact can land between scheduling and turn end; ours would then compact a fresh summary.
+  on('session.compact', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId === undefined && e.trigger !== 'precompute' && r.skip === undefined) state.compactions++
+    return r
+  })
+
   on('turn.complete', ($, e, next) => {
     const job = state.pending
     if (e.agentId !== undefined || job === undefined) return next(e)
     state.pending = undefined
+    if (job.epoch !== state.compactions) {
+      $.ui.toast('early-compact: skipped (already compacted)')
+      return next(e)
+    }
     // Aborted or failed turns mean the person is back; leave the conversation alone.
     if (e.reason === 'answer') compactWhenIdle($, state, job, 0)
     return next(e)
@@ -123,6 +140,7 @@ async function guidance(
 // Retry briefly, then wait for that turn to end.
 function compactWhenIdle($: EngineInterface, state: State, job: Pending, attempt: number): void {
   $.clock.after(attempt === 0 ? 0 : RETRY_MS, () => {
+    if (job.epoch !== state.compactions) return
     $.ui.status('early-compact: compacting while waiting...')
     $.session
       .compact({ instructions: job.instructions })
