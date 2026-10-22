@@ -1,6 +1,6 @@
 {
   "name": "early-compact",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Compacts the conversation while a slow backgrounded command runs, ahead of the auto-compact threshold.",
   "author": {
     "name": "Andre LaBranche"
