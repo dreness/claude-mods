@@ -4,7 +4,7 @@ A Claude Code plugin marketplace of mods (hooks-module plugins).
 
 | Mod | What it does |
 | --- | --- |
-| [early-compact](plugins/early-compact) | Compacts the conversation while a slow backgrounded command runs, ahead of the auto-compact threshold. |
+| <img src="plugins/early-compact/.claude-plugin/icon.png" alt="" width="20"> [early-compact](plugins/early-compact) | Compacts the conversation while a backgrounded command runs, ahead of the auto-compact threshold. |
 
 ## Install
 

@@ -1,4 +1,4 @@
-# early-compact
+# <img src=".claude-plugin/icon.png" alt="" width="48" align="absmiddle"> early-compact
 
 A Claude Code mod that compacts the conversation while a background command runs, so compaction uses time you would spend waiting anyway instead of interrupting work later when auto-compact kicks in.
 
@@ -26,6 +26,18 @@ Details:
 | --- | --- | --- |
 | `threshold` | 70 | Context fullness (%) at which a background Bash call schedules a compaction. |
 | `nudge` | true | Shows a toast when a foreground Bash call takes 15s or more above the threshold, i.e. a missed chance. The model is reminded either way. |
+
+## Usage report
+
+`scripts/usage-report.py` reads every transcript under `~/.claude/projects` and reports how early compactions turned out: compacted, skipped and why, late, or doubled up with a neighbouring compaction (within 180s or 30k tokens of growth). It also estimates the time saved against auto-compaction.
+
+```
+python3 scripts/usage-report.py                     # Markdown report on stdout
+python3 scripts/usage-report.py --since 2026-10-21  # skip anything before a local date
+python3 scripts/usage-report.py --json calls.json   # also write one record per scheduled compaction
+```
+
+`--root` reads transcripts from another folder.
 
 ## Install
 

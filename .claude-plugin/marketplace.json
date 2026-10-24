@@ -8,7 +8,7 @@
     {
       "name": "early-compact",
       "source": "./plugins/early-compact",
-      "description": "Compacts the conversation while a slow backgrounded command runs, ahead of the auto-compact threshold."
+      "description": "Compacts the conversation while a backgrounded command runs, ahead of the auto-compact threshold."
     }
   ]
 }
