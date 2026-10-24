@@ -1,7 +1,7 @@
 {
   "name": "early-compact",
-  "version": "0.2.1",
-  "description": "Compacts the conversation while a slow backgrounded command runs, ahead of the auto-compact threshold.",
+  "version": "0.3.0",
+  "description": "Compacts the conversation while a backgrounded command runs, ahead of the auto-compact threshold.",
   "author": {
     "name": "Andre LaBranche"
   },
@@ -10,8 +10,8 @@
     "threshold": {
       "type": "number",
       "title": "Threshold (%)",
-      "description": "Context fullness at which the tool schedules a compaction.",
-      "default": 60,
+      "description": "Context fullness at which a background command schedules a compaction.",
+      "default": 70,
       "min": 1,
       "max": 95
     },

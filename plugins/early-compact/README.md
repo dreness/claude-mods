@@ -1,29 +1,30 @@
 # early-compact
 
-A Claude Code mod that compacts the conversation while a slow background command runs, so compaction uses time you would spend waiting anyway instead of interrupting work later when auto-compact kicks in.
+A Claude Code mod that compacts the conversation while a background command runs, so compaction uses time you would spend waiting anyway instead of interrupting work later when auto-compact kicks in.
 
 ## How it works
 
-1. The mod registers a tool, `compact_while_waiting`. Its description tells the model to run any command that may take 15s or more with `run_in_background: true`, even one it would otherwise run in the foreground, then call the tool, passing instructions for the summary (task id, what the command does, what to do with its output).
-2. Once context reaches the threshold, the next tool result carries a reminder telling the model to do this until the conversation is compacted, including tests and builds it would normally run in the foreground. A foreground Bash call that then takes 15s or more gets a second reminder after its result. The first reminder is sent again only after context drops below the threshold and crosses it again.
-3. If context is at or above the threshold, the tool schedules a compaction and tells the model to end its turn. Below the threshold it answers "not needed" and does nothing.
-4. When the main agent's turn ends normally, the mod calls `compact()` with those instructions. The task's completion notice then resumes the model after compaction.
+1. Once context reaches the threshold, the next tool result carries a reminder telling the model to run any command that may take 15s or more with `run_in_background: true`, including tests and builds it would normally run in the foreground, then end its turn. The reminder is sent again only after context drops below the threshold and crosses it again.
+2. A background Bash call that starts at or above the threshold schedules a compaction. Its result tells the model to end its turn if it is only waiting on the task.
+3. When the main agent's turn ends normally and a scheduled task is still running, the mod calls `compact()`, with instructions naming the running tasks. The task's completion notice then resumes the model after compaction.
+4. A foreground Bash call that takes 15s or more above the threshold gets a reminder after its result.
 
 Details:
 
-- `compact()` refuses while a turn is running. The mod retries 8 times at 250ms intervals, then waits for one more turn end and tries again. After that it gives up with a toast.
+- Further background calls before the turn ends join the same schedule.
+- If every scheduled task has finished by the turn end, the compaction is skipped: there is nothing to overlap, and auto-compact would free more context later for the same cost.
+- `compact()` refuses while a turn is running. The mod retries 8 times at 250ms intervals, then waits for one more turn end and tries again. After that it gives up.
 - A turn that ends aborted or with an error drops the schedule: you are back at the keyboard, so the conversation is left alone.
-- Subagents can't use the tool, get no reminders, and their turn ends don't trigger the compaction.
-- A later call replaces the instructions from an earlier one.
+- Subagents get no reminders, and their calls and turn ends don't schedule or trigger a compaction.
 - If the conversation is compacted some other way before the scheduled compaction runs (auto-compact, `/compact`, another plugin), the schedule is dropped.
-- If a background task finishes before the turn ends, its notice starts a new turn right away. Compaction then happens when that turn ends instead.
-- A status line entry shows while compacting. A toast reports when compaction is done, skipped or abandoned.
+- A long-lived background task (a dev server, a watcher) also schedules a compaction, which then runs at the turn end while you read the reply.
+- A status line entry shows while compacting. A system row in the transcript (not sent to the model) reports when compaction is done, skipped, dropped or abandoned.
 
 ## Options
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `threshold` | 60 | Context fullness (%) at which the tool schedules a compaction. |
+| `threshold` | 70 | Context fullness (%) at which a background Bash call schedules a compaction. |
 | `nudge` | true | Shows a toast when a foreground Bash call takes 15s or more above the threshold, i.e. a missed chance. The model is reminded either way. |
 
 ## Install

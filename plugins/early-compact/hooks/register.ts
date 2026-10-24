@@ -1,30 +1,32 @@
 import type { EngineInterface, Register, ToolCallInput } from 'claude-code'
 
-const NAME = 'compact_while_waiting'
-const DEFAULT_THRESHOLD = 60
+const DEFAULT_THRESHOLD = 70
 const SLOW_MS = 15_000
 const RETRY_MS = 250
 const MAX_RETRIES = 8
 // Turn ends a rejected compaction waits through before it is dropped.
 const MAX_REARMS = 1
-
-const DESCRIPTION = `Compacts the conversation while a backgrounded command runs, so compaction happens during idle time instead of mid-task later.
-
-Use it when you are about to run a shell command that may take ${SLOW_MS / 1000}s or more (test suite, build, install, linter, long script):
-1. Run the command with run_in_background: true, even one you would otherwise run in the foreground.
-2. Call this tool, passing in \`instructions\` the background task id, what the command does, and what you will do with its output.
-3. If the tool says compaction is scheduled, end your turn immediately with a one-line note. Do not poll or sleep; the task's completion notification will resume you after compaction.
-
-If it says compaction is not needed, carry on as usual.`
+const TASK_ID = /<task-id>([^<]+)<\/task-id>/g
 
 const reminder = (percent: number) =>
-  `Context is ${percent}% full, near auto-compaction. Until it is compacted, run every shell command that may take ${SLOW_MS / 1000}s or more (tests, builds, installs, linters, long scripts) with run_in_background: true, including ones you would normally run in the foreground, then call ${NAME} as its description says. Waiting on that command then pays for the compaction.`
+  `Context is ${percent}% full, near auto-compaction. Until it is compacted, run every shell command that may take ${SLOW_MS / 1000}s or more (tests, builds, installs, linters, long scripts) with run_in_background: true, including ones you would normally run in the foreground. If you are then only waiting on it, end your turn: early-compact compacts the conversation while it runs, and its completion notice resumes you.`
+
+const scheduled = (id: string, percent: number) =>
+  `early-compact: compaction scheduled while background task ${id} runs (context ${percent}% full). If you are only waiting on it, end your turn now with a one-line note; do not poll or sleep. Its completion notice resumes you after compaction.`
+
+const alsoWaits = (id: string) => `early-compact: the scheduled compaction also waits on background task ${id}.`
 
 const missed = (seconds: number) =>
-  `That command ran ${seconds}s in the foreground with context above the compaction threshold. Run commands like it with run_in_background: true and call ${NAME}.`
+  `That command ran ${seconds}s in the foreground with context above the compaction threshold. Run commands like it with run_in_background: true, then end your turn while it runs.`
 
+const instructionsFor = (tasks: Record<string, string>) =>
+  `Background tasks still running: ${Object.entries(tasks)
+    .map(([id, label]) => `${id} (${label})`)
+    .join('; ')}. Their completion notices arrive after this compaction: read each one's output, then carry on with the work in progress.`
+
+// tasks: background task id -> what it runs, for those not yet reported finished.
 // epoch: State.compactions when scheduled; a compaction since then makes this one redundant.
-type Pending = { instructions: string; rearms: number; epoch: number }
+type Pending = { tasks: Record<string, string>; rearms: number; epoch: number }
 // reminded: the model was told to background slow commands since context last crossed the threshold.
 // compactions: main-conversation compactions seen, from any trigger.
 type State = { pending?: Pending; reminded?: boolean; compactions: number }
@@ -34,42 +36,6 @@ export const register: Register = (on, options) => {
   const nudge = options.nudge !== false
   const state: State = { compactions: 0 }
 
-  on('session.start', async ($, e, next) => {
-    await $.tool.register({
-      name: NAME,
-      description: DESCRIPTION,
-      inputSchema: {
-        type: 'object',
-        properties: {
-          instructions: {
-            type: 'string',
-            description: 'What the summary must keep: the background task id, its purpose, next steps.',
-          },
-        },
-        required: ['instructions'],
-      },
-      isDeferred: false,
-    })
-    return next(e)
-  })
-
-  on('tool.call', { tool: `mcp__early-compact__${NAME}` }, async ($, e) => {
-    if (e.agentId !== undefined) return { result: 'Not available in subagents; carry on.' }
-    const { context } = await $.session.usage()
-    const percent = context.percent ?? 0
-    if (percent < threshold) {
-      return { result: `Context is ${percent}% full (threshold ${threshold}%); compaction not needed. Carry on.` }
-    }
-    state.pending = {
-      instructions: String((e as { instructions?: unknown }).instructions ?? ''),
-      rearms: 0,
-      epoch: state.compactions,
-    }
-    return {
-      result: `Context is ${percent}% full. Compaction is scheduled for when this turn ends. End your turn now; do not poll the background task.`,
-    }
-  }).catch(() => ({ result: 'early-compact failed; carry on without it.' }))
-
   // Auto-compact can land between scheduling and turn end; ours would then compact a fresh summary.
   on('session.compact', async ($, e, next) => {
     const r = await next(e)
@@ -77,27 +43,41 @@ export const register: Register = (on, options) => {
     return r
   })
 
+  // A task's notification row, queued or delivered, means it no longer needs waiting on.
+  on('session.append', ($, e, next) => {
+    const job = state.pending
+    if (job !== undefined && e.agentId === undefined) {
+      for (const block of e.message.content) {
+        if (block.type !== 'text' || typeof block.text !== 'string') continue
+        for (const [, id] of block.text.matchAll(TASK_ID)) if (id !== undefined) delete job.tasks[id]
+      }
+    }
+    return next(e)
+  })
+
   on('turn.complete', ($, e, next) => {
     const job = state.pending
     if (e.agentId !== undefined || job === undefined) return next(e)
     state.pending = undefined
-    if (job.epoch !== state.compactions) {
-      $.ui.toast('early-compact: skipped (already compacted)')
-      return next(e)
-    }
+    if (job.epoch !== state.compactions) notice($, 'early-compact: skipped (already compacted)')
     // Aborted or failed turns mean the person is back; leave the conversation alone.
-    if (e.reason === 'answer') compactWhenIdle($, state, job, 0)
+    else if (e.reason !== 'answer') notice($, `early-compact: dropped (turn ended: ${e.reason})`)
+    // Nothing left to overlap; auto-compact frees more context later at the same cost.
+    else if (Object.keys(job.tasks).length === 0) notice($, 'early-compact: skipped (background task already finished)')
+    else compactWhenIdle($, state, job, 0)
     return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
-    if (e.agentId !== undefined || e.tool === `mcp__early-compact__${NAME}`) return next(e)
+    if (e.agentId !== undefined) return next(e)
     const startedAt = await $.clock.now().catch(() => undefined)
     const r = await next(e)
     if (r.deny !== undefined) return r
     // Guarded here, not with .catch, which would run the tool again.
     try {
-      const notes = await guidance($, e, startedAt, state, { threshold, nudge })
+      const taskId =
+        e.tool === 'Bash' && !r.isError ? (r.result as { backgroundTaskId?: string }).backgroundTaskId : undefined
+      const notes = await guidance($, e, taskId, startedAt, state, { threshold, nudge })
       return notes.length === 0 ? r : { ...r, context: [...(r.context ?? []), notes.join('\n\n')] }
     } catch {
       return r
@@ -110,6 +90,7 @@ type Config = { threshold: number; nudge: boolean }
 async function guidance(
   $: EngineInterface,
   e: ToolCallInput,
+  taskId: string | undefined,
   startedAt: number | undefined,
   state: State,
   { threshold, nudge }: Config,
@@ -125,7 +106,17 @@ async function guidance(
     state.reminded = true
     notes.push(reminder(percent))
   }
-  if (e.tool === 'Bash' && !e.run_in_background && startedAt !== undefined) {
+  if (taskId !== undefined && e.tool === 'Bash') {
+    const label = (e.description ?? e.command).slice(0, 200)
+    const job = state.pending
+    if (job === undefined || job.epoch !== state.compactions) {
+      state.pending = { tasks: { [taskId]: label }, rearms: 0, epoch: state.compactions }
+      notes.push(scheduled(taskId, percent))
+    } else {
+      job.tasks[taskId] = label
+      notes.push(alsoWaits(taskId))
+    }
+  } else if (e.tool === 'Bash' && startedAt !== undefined) {
     const elapsed = (await $.clock.now()) - startedAt
     const seconds = Math.round(elapsed / 1000)
     if (elapsed >= SLOW_MS) {
@@ -136,6 +127,11 @@ async function guidance(
   return notes
 }
 
+// A system row: shown in the transcript, never read by the model.
+function notice($: EngineInterface, text: string): void {
+  $.session.append({ message: { type: 'system', content: [{ type: 'text', text }] } }).catch(() => $.ui.toast(text))
+}
+
 // compact() rejects while a turn runs, e.g. one a queued notification started.
 // Retry briefly, then wait for that turn to end.
 function compactWhenIdle($: EngineInterface, state: State, job: Pending, attempt: number): void {
@@ -143,10 +139,10 @@ function compactWhenIdle($: EngineInterface, state: State, job: Pending, attempt
     if (job.epoch !== state.compactions) return
     $.ui.status('early-compact: compacting while waiting...')
     $.session
-      .compact({ instructions: job.instructions })
+      .compact({ instructions: instructionsFor(job.tasks) })
       .then(r => {
         $.ui.status(undefined)
-        $.ui.toast(r.skip !== undefined ? `early-compact: skipped (${r.skip})` : 'early-compact: compacted while waiting')
+        notice($, r.skip !== undefined ? `early-compact: skipped (${r.skip})` : 'early-compact: compacted while waiting')
       })
       .catch((err: unknown) => {
         $.ui.status(undefined)
@@ -155,7 +151,7 @@ function compactWhenIdle($: EngineInterface, state: State, job: Pending, attempt
           state.pending = { ...job, rearms: job.rearms + 1 }
           return
         }
-        $.ui.toast(`early-compact: gave up: ${String(err).slice(0, 200)}`)
+        notice($, `early-compact: gave up: ${String(err).slice(0, 200)}`)
       })
   })
 }

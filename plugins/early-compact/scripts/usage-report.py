@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Report on early-compact usage from Claude Code transcripts.
 
-Scans ~/.claude/projects/**/*.jsonl (or --root) for compact_while_waiting calls
-and compaction boundaries, classifies each call, and estimates time saved.
+Scans ~/.claude/projects/**/*.jsonl (or --root) for scheduled early compactions
+(compact_while_waiting calls up to 0.2.x, scheduled notes on background Bash
+results from 0.3.0) and compaction boundaries, classifies each, and estimates
+time saved.
 
 Time model, per early compaction:
   hidden   = overlap of the compaction with the background task it waited on
@@ -24,6 +26,9 @@ from pathlib import Path
 TOOL = 'mcp__early-compact__compact_while_waiting'
 BG_RE = re.compile(r'running in background with ID: (\w+)')
 TASK_RE = re.compile(r'<task-id>(\w+)</task-id>')
+SCHEDULED_RE = re.compile(r'early-compact: compaction scheduled while background task (\w+) runs \(context (\d+)% full\)')
+# Turn-end outcomes that mean no compaction ran; "compacted while waiting" is read from the boundary.
+NOTICE_RE = re.compile(r'early-compact: (skipped \([^)]*\)|dropped \([^)]*\)|gave up.*)')
 # Neighbouring compactions count as a double when either limit holds.
 DOUBLE_S = 180
 DOUBLE_TOKENS = 30_000
@@ -99,6 +104,16 @@ def analyze_file(path, since=0.0):
                     events.append((t, 'reminder', d))
                 if 'in the foreground with context above' in body:
                     signals['missed'] += 1
+                m = SCHEDULED_RE.search(body)
+                if m:
+                    events.append((t, 'invoke', {'id': a.get('toolUseID') or d.get('uuid'), 'called': t,
+                                                 'result': 'scheduled', 'instructions': m.group(1),
+                                                 'percent': int(m.group(2))}))
+            continue
+        if typ == 'system':
+            m = NOTICE_RE.search(text_of(d.get('content')) or text_of((d.get('message') or {}).get('content')))
+            if m:
+                events.append((t, 'notice', m.group(1)))
             continue
         if typ not in ('user', 'assistant'):
             continue
@@ -139,8 +154,8 @@ def analyze_file(path, since=0.0):
             continue
         r = data['result']
         pct = re.search(r'Context is (\d+)%', r)
-        inv = {'id': data['id'], 'file': str(path), 'time': t, 'percent': int(pct.group(1)) if pct else None,
-               'sidechain': sidechain}
+        inv = {'id': data['id'], 'file': str(path), 'time': t,
+               'percent': data.get('percent', int(pct.group(1)) if pct else None), 'sidechain': sidechain}
         if 'not needed' in r:
             inv['outcome'] = 'not_needed'
         elif 'subagents' in r:
@@ -173,6 +188,10 @@ def follow_scheduled(events, i, data, bg_start, task_end):
             return out
         if kind == 'turn_end':
             turns += 1
+        elif kind == 'notice':
+            out['outcome'] = 'not_compacted'
+            out['why'] = d
+            return out
         elif kind == 'interrupt':
             out['outcome'] = 'not_compacted'
             out['why'] = 'turn interrupted'
