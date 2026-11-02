@@ -24,9 +24,12 @@ from datetime import datetime
 from pathlib import Path
 
 TOOL = 'mcp__early-compact__compact_while_waiting'
+# Any trace of the mod: the 0.2.x MCP tool, or a 0.3.0 hook note / system row.
+MENTION_RE = re.compile(r'mcp__early-compact__|early-compact: |near auto-compaction')
 BG_RE = re.compile(r'running in background with ID: (\w+)')
 TASK_RE = re.compile(r'<task-id>(\w+)</task-id>')
 SCHEDULED_RE = re.compile(r'early-compact: compaction scheduled while background task (\w+) runs \(context (\d+)% full\)')
+JOIN_RE = re.compile(r'early-compact: the scheduled compaction also waits on background task (\w+)')
 # Turn-end outcomes that mean no compaction ran; "compacted while waiting" is read from the boundary.
 NOTICE_RE = re.compile(r'early-compact: (skipped \([^)]*\)|dropped \([^)]*\)|gave up.*)')
 # Neighbouring compactions count as a double when either limit holds.
@@ -109,6 +112,8 @@ def analyze_file(path, since=0.0):
                     events.append((t, 'invoke', {'id': a.get('toolUseID') or d.get('uuid'), 'called': t,
                                                  'result': 'scheduled', 'instructions': m.group(1),
                                                  'percent': int(m.group(2))}))
+                for tid in JOIN_RE.findall(body):
+                    events.append((t, 'join', tid))
             continue
         if typ == 'system':
             m = NOTICE_RE.search(text_of(d.get('content')) or text_of((d.get('message') or {}).get('content')))
@@ -177,11 +182,25 @@ def follow_scheduled(events, i, data, bg_start, task_end):
     started = [(t, tid) for t, k, tid in events[:i] if k == 'bg_start']
     named = [tid for _, tid in started if tid in data['instructions']]
     task = named[-1] if named else (started[-1][1] if started else None)
-    out = {'task': task, 'task_start': bg_start.get(task), 'task_end': task_end.get(task)}
+    # Later background calls in the same turn join the schedule; the compaction waits on all of them.
+    tasks = [task] if task else []
+    for _, kind, d in events[i + 1:]:
+        if kind in ('invoke', 'turn_end', 'boundary', 'notice', 'prompt'):
+            break
+        if kind == 'join' and d not in tasks:
+            tasks.append(d)
+    spans = [(bg_start.get(x), task_end.get(x)) for x in tasks if bg_start.get(x) is not None]
+    out = {'task': task, 'tasks': tasks, 'task_start': bg_start.get(task), 'task_end': task_end.get(task)}
+    if spans:
+        # Reported span: from the first start to the last known end (None if one is still running).
+        out['task_start'] = min(s for s, _ in spans)
+        out['task_end'] = None if any(e is None for _, e in spans) else max(e for _, e in spans)
     if out['task_end'] is not None and out['task_end'] <= data['called']:
         out['task_done_first'] = True
     turns = 0
     for t, kind, d in events[i + 1:]:
+        if kind == 'join':
+            continue
         if kind == 'invoke':
             # A later call replaces this one's instructions; it owns the compaction.
             out['outcome'] = 'superseded'
@@ -216,14 +235,17 @@ def follow_scheduled(events, i, data, bg_start, task_end):
                 out['why'] = f"preempted by {m.get('trigger')} compaction"
                 return out
             out['outcome'] = 'compacted'
-            ts_, te = out['task_start'], out['task_end']
-            if ts_ is not None and te is not None:
-                out['hidden'] = max(0.0, min(end, te) - max(start, ts_))
-            elif ts_ is not None:
-                out['hidden'] = max(0.0, end - max(start, ts_))
-            else:
-                out['hidden'] = 0.0
+            # Hidden: compaction time while at least one task still ran (union of task spans).
+            segs = sorted((s, e if e is not None else float('inf')) for s, e in spans)
+            merged = []
+            for s_, e_ in segs:
+                if merged and s_ <= merged[-1][1]:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], e_))
+                else:
+                    merged.append((s_, e_))
+            out['hidden'] = sum(max(0.0, min(end, e_) - max(start, s_)) for s_, e_ in merged)
             out['exposed'] = out['duration'] - out['hidden']
+            te = out['task_end']
             late = []
             if te is not None and te <= start:
                 late.append('task finished before compaction started')
@@ -253,7 +275,10 @@ def scan_baseline(root):
                     if d.get('subtype') == 'compact_boundary':
                         d['_file'] = str(path)
                         boundaries.setdefault(d.get('uuid'), d)
-                elif '"early-compact"' in line and 'mcp_instructions_delta' in line:
+                elif ('"early-compact"' in line and 'mcp_instructions_delta' in line) or \
+                        ('near auto-compaction' in line and 'hook_additional_context' in line):
+                    # 0.2.x announced itself as an MCP server; 0.3.0 leaves no trace until the
+                    # threshold reminder fires, so this undercounts sessions that stayed small.
                     mod_files.add(str(path))
     return list(boundaries.values()), mod_files
 
@@ -282,7 +307,7 @@ def main():
     args = ap.parse_args()
     since = datetime.strptime(args.since, '%Y-%m-%d').timestamp() if args.since else 0.0
 
-    files = [p for p in args.root.rglob('*.jsonl') if TOOL in p.read_text(errors='replace')]
+    files = [p for p in args.root.rglob('*.jsonl') if MENTION_RE.search(p.read_text(errors='replace'))]
     invocations, signals = {}, Counter()
     for path in files:
         invs, _, sig = analyze_file(path, since)

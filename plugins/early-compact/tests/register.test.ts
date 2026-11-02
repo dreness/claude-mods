@@ -10,7 +10,7 @@ type Outcome = 'ok' | 'skip' | 'reject'
 // Stands for the engine. `outcomes` answers each compact() in turn; the last repeats.
 // `toolMs` is how long each tool call takes; `usage.percent` can be changed between calls.
 // A backgrounded Bash call gets task ids b1, b2, ...
-function world(on: On, percent: number, outcomes: Outcome[] = ['ok'], toolMs = 0) {
+function world(on: On, percent: number, outcomes: Outcome[] = ['ok'], toolMs = 0, bgExtra: Record<string, unknown> = {}) {
   const usage = { percent }
   const compactions: (string | undefined)[] = []
   const toasts: string[] = []
@@ -22,8 +22,9 @@ function world(on: On, percent: number, outcomes: Outcome[] = ['ok'], toolMs = 0
   on('tool.call', async ($, e) => {
     if (toolMs > 0) await clock.set(clock.now() + toolMs)
     const bg = e.tool === 'Bash' && e.run_in_background === true
-    return { result: { stdout: '', stderr: '', interrupted: false, ...(bg ? { backgroundTaskId: `b${++tasks}` } : {}) } }
+    return { result: { stdout: '', stderr: '', interrupted: false, ...(bg ? { backgroundTaskId: `b${++tasks}`, ...bgExtra } : {}) } }
   })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.compact', ($, e) => {
     compactions.push(e.instructions)
     const o = outcomes[Math.min(compactions.length - 1, outcomes.length - 1)]
@@ -271,6 +272,78 @@ describe('when compact() fails', () => {
     expect(compactions).toHaveLength(18)
     expect(notices()).toHaveLength(1)
     expect(notices()[0]).toContain('gave up')
+  })
+})
+
+describe('headless sessions', () => {
+  test('nothing is scheduled or said when no one is at the prompt', async ($, on) => {
+    const { clock, compactions } = world(on, 75)
+    await $.session.start({ cwd: '/w', surface: null, isInteractive: false })
+    const r = await $.tool.call(BG)
+    expect(r.context).toBeUndefined()
+    await $.turn.complete(TURN)
+    await clock.advance(10_000)
+    expect(compactions).toEqual([])
+  })
+
+  test('an interactive start keeps the mod on', async ($, on) => {
+    const { clock, compactions } = world(on, 75)
+    await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+    await $.tool.call(BG)
+    await $.turn.complete(TURN)
+    await clock.settle()
+    expect(compactions).toHaveLength(1)
+  })
+
+  test('a task that ends with the final response schedules nothing', async ($, on) => {
+    const { clock, compactions } = world(on, 75, ['ok'], 0, { backgroundEndsWithFinalResponse: true })
+    const r = await $.tool.call(BG)
+    expect(r.context?.join('')).not.toContain('scheduled')
+    await $.turn.complete(TURN)
+    await clock.advance(10_000)
+    expect(compactions).toEqual([])
+  })
+})
+
+describe('tasks finishing during retries', () => {
+  test('a task that finishes between retries skips the compaction', async ($, on) => {
+    const { clock, compactions, notices } = world(on, 75, ['reject', 'ok'])
+    await $.tool.call(BG)
+    await $.turn.complete(TURN)
+    await clock.advance(0)
+    expect(compactions).toHaveLength(1)
+    await finished($, 'b1')
+    await clock.advance(10_000)
+    expect(compactions).toHaveLength(1)
+    expect(notices()).toEqual(['early-compact: skipped (background task already finished)'])
+  })
+})
+
+describe('context growing with a schedule pending', () => {
+  test('the model is nagged once past the margin', async ($, on) => {
+    const { usage } = world(on, 75)
+    await $.tool.call(BG)
+    const r1 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r1.context).toBeUndefined()
+    usage.percent = 80
+    const r2 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r2.context?.[0]).toContain('already scheduled')
+    expect(r2.context?.[0]).toContain('80%')
+    usage.percent = 85
+    const r3 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r3.context).toBeUndefined()
+  })
+
+  test('no nag without a schedule, and a joining task is not nagged', async ($, on) => {
+    const { usage } = world(on, 75)
+    await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    usage.percent = 85
+    const r1 = await $.tool.call({ tool: 'Read', file_path: '/w/a' })
+    expect(r1.context).toBeUndefined()
+    await $.tool.call(BG)
+    const r2 = await $.tool.call(BG)
+    expect(r2.context?.[0]).toContain('also waits')
+    expect(r2.context?.join('')).not.toContain('already scheduled')
   })
 })
 

@@ -12,10 +12,12 @@ A Claude Code mod that compacts the conversation while a background command runs
 Details:
 
 - Further background calls before the turn ends join the same schedule.
-- If every scheduled task has finished by the turn end, the compaction is skipped: there is nothing to overlap, and auto-compact would free more context later for the same cost.
+- If every scheduled task has finished by the turn end, or finishes while `compact()` is being retried, the compaction is skipped: there is nothing to overlap, and auto-compact would free more context later for the same cost.
+- If the turn keeps going with a schedule pending and context grows 10 points past the threshold, the next tool result reminds the model once that a compaction is waiting on the turn ending. Otherwise auto-compact can land first.
 - `compact()` refuses while a turn is running. The mod retries 8 times at 250ms intervals, then waits for one more turn end and tries again. After that it gives up.
 - A turn that ends aborted or with an error drops the schedule: you are back at the keyboard, so the conversation is left alone.
 - Subagents get no reminders, and their calls and turn ends don't schedule or trigger a compaction.
+- Headless sessions (`claude -p`, the SDK) get nothing either: `compact()` is not available there between turns. A background command that ends with the final response sends no completion notice, so it schedules nothing.
 - If the conversation is compacted some other way before the scheduled compaction runs (auto-compact, `/compact`, another plugin), the schedule is dropped.
 - A long-lived background task (a dev server, a watcher) also schedules a compaction, which then runs at the turn end while you read the reply.
 - A status line entry shows while compacting. A system row in the transcript (not sent to the model) reports when compaction is done, skipped, dropped or abandoned.
@@ -29,7 +31,7 @@ Details:
 
 ## Usage report
 
-`scripts/usage-report.py` reads every transcript under `~/.claude/projects` and reports how early compactions turned out: compacted, skipped and why, late, or doubled up with a neighbouring compaction (within 180s or 30k tokens of growth). It also estimates the time saved against auto-compaction.
+`scripts/usage-report.py` reads every transcript under `~/.claude/projects` and reports how early compactions turned out: compacted, skipped and why, late, or doubled up with a neighbouring compaction (within 180s or 30k tokens of growth). It also estimates the time saved against auto-compaction. Overlap counts every task the compaction waited on, including ones that joined the schedule later in the turn.
 
 ```
 python3 scripts/usage-report.py                     # Markdown report on stdout
