@@ -302,6 +302,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--root', type=Path, default=Path.home() / '.claude' / 'projects')
     ap.add_argument('--json', type=Path, help='also write per-invocation records here')
+    ap.add_argument('--summary', type=Path, help='also write the headline numbers here (input to usage-graphic.py)')
     ap.add_argument('--since', metavar='YYYY-MM-DD',
                     help='ignore calls and compactions before this local date')
     args = ap.parse_args()
@@ -419,6 +420,7 @@ def main():
     a_pre = med([b['compactMetadata'].get('preTokens') for b in autos])
     a_post = med([b['compactMetadata'].get('postTokens') for b in autos])
     a_dur = dur(autos)
+    summary = {}
     p(f'Auto-compaction baseline: median {fmt_s(a_dur)} at {a_pre:,.0f} pre-tokens.\n' if a_dur else '')
     real = [i for i in comp if (i['percent'] or 0) >= DEFAULT_THRESHOLD]
     for label, group in (('All early compactions', comp),
@@ -438,6 +440,11 @@ def main():
             equiv = [max(0.0, (i['pre'] - i['post']) / (a_pre - a_post))
                      for i in group if i.get('pre') and i.get('post') is not None]
             replaced = sum(equiv) * a_dur
+            if group is comp:
+                summary['time'] = {'total': total, 'hidden': hidden, 'exposed': exposed,
+                                   'fully_hidden': sum(1 for i in group if i['exposed'] < 1),
+                                   'equiv_sum': sum(equiv), 'equiv_med': med(equiv),
+                                   'replaced': replaced, 'net': replaced - exposed}
             p(f'- Each replaces a median {med(equiv):.2f} of an auto-compaction cycle (compacting earlier '
               f'frees less context); together {sum(equiv):.1f} auto-compactions, ~{fmt_s(replaced)} of blocking time.')
             p(f'- Estimated net time saved: {fmt_s(replaced)} replaced - {fmt_s(exposed)} still waited on = '
@@ -482,6 +489,31 @@ def main():
 
     if args.json:
         args.json.write_text(json.dumps(invs, indent=1, default=str))
+    if args.summary:
+        kind = lambda bs: {'count': len(bs), 'dur': dur(bs),
+                           'pre': med([b['compactMetadata'].get('preTokens') for b in bs]),
+                           'post': med([b['compactMetadata'].get('postTokens') for b in bs])}
+        by_day = defaultdict(Counter)
+        for b in all_bounds:
+            if b['_file'] not in mod_files or not b['_t']:
+                continue
+            k = 'early' if b.get('uuid') in ours else b['compactMetadata'].get('trigger')
+            by_day[datetime.fromtimestamp(b['_t']).strftime('%Y-%m-%d')][k] += 1
+        summary.update({
+            'since': args.since, 'first': iso(first), 'last': iso(max((i['time'] for i in invs if i['time']), default=None)),
+            'generated': datetime.now().strftime('%Y-%m-%d %H:%M'),
+            'sessions_with_mod': len(mod_files),
+            'projects': len({Path(i['file']).parent.name for i in sched}),
+            'calls': len(invs), 'not_needed': oc['not_needed'], 'scheduled': len(sched), 'compacted': len(comp),
+            'late': len(late), 'doubles': sum(1 for i in comp if i.get('double')),
+            'superseded': oc['superseded'], 'not_compacted': oc['not_compacted'],
+            'why': dict(why), 'reminders': signals['reminders'], 'missed': signals['missed'],
+            'early': kind([b for b in all_bounds if b.get('uuid') in ours]),
+            'auto': kind(autos), 'auto_mod': kind(autos_mod), 'manual_other': kind(manual_other),
+            'by_day': {d: dict(c) for d, c in sorted(by_day.items())},
+            'hidden_fraction': sorted(i['hidden'] / i['duration'] for i in comp if i.get('duration')),
+        })
+        args.summary.write_text(json.dumps(summary, indent=1, default=str))
 
 
 if __name__ == '__main__':

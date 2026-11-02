@@ -2,6 +2,13 @@
 
 A Claude Code mod that compacts the conversation while a background command runs, so compaction uses time you would spend waiting anyway instead of interrupting work later when auto-compact kicks in.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/usage-dark.svg">
+  <img alt="early-compact usage summary: net waiting time removed, schedule outcomes, compactions per day and how much of each compaction its task hid" src="docs/usage-light.svg" width="920">
+</picture>
+
+Numbers from one user's transcripts over the first nine days of 0.3.0; see [Usage report](#usage-report) for how they are measured.
+
 ## How it works
 
 1. Once context reaches the threshold, the next tool result carries a reminder telling the model to run any command that may take 15s or more with `run_in_background: true`, including tests and builds it would normally run in the foreground, then end its turn. The reminder is sent again only after context drops below the threshold and crosses it again.
@@ -40,6 +47,13 @@ python3 scripts/usage-report.py --json calls.json   # also write one record per 
 ```
 
 `--root` reads transcripts from another folder.
+
+`scripts/usage-graphic.py` draws the headline numbers as the SVG above, in a light and a dark variant:
+
+```
+python3 scripts/usage-report.py --since 2026-10-24 --summary summary.json > /dev/null
+python3 scripts/usage-graphic.py summary.json      # writes docs/usage-light.svg and docs/usage-dark.svg
+```
 
 ## Install
 

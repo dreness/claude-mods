@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="668" viewBox="0 0 920 668" font-family='-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif' role="img" aria-label="early-compact usage summary">
+<rect width="920" height="668" fill="#fcfcfb" rx="8"/>
+<text x="28.0" y="44.0" text-anchor="start" style="font-size:22px;font-weight:600;fill:#0b0b0b">early-compact in practice</text>
+<text x="28.0" y="66.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#52514e">84 compactions scheduled across 13 projects, 2026-10-24 to 2026-11-01. Measured from Claude Code transcripts by scripts/usage-report.py.</text>
+<rect x="28.0" y="92.0" width="250.0" height="204.0" rx="6" fill="#2a78d6"/>
+<text x="44.0" y="170.0" text-anchor="start" style="font-size:56px;font-weight:700;fill:#ffffff;font-variant-numeric:tabular-nums">27 min</text>
+<text x="44.0" y="198.0" text-anchor="start" style="font-size:14px;font-weight:400;fill:#ffffff;opacity:0.9">of waiting removed, net</text>
+<text x="44.0" y="238.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#ffffff;opacity:0.8">23s per early compaction</text>
+<text x="44.0" y="256.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#ffffff;opacity:0.8">57 min of auto-compaction replaced</text>
+<text x="44.0" y="274.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#ffffff;opacity:0.8">30 min still waited on</text>
+<rect x="290.0" y="92.0" width="295.0" height="96.0" rx="6" fill="#f3f2ee"/>
+<text x="304.0" y="132.0" text-anchor="start" style="font-size:26px;font-weight:600;fill:#0b0b0b;font-variant-numeric:tabular-nums">72 of 84</text>
+<text x="304.0" y="154.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#52514e">schedules compacted while waiting</text>
+<text x="304.0" y="172.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#8a8884">86%; 0 double compactions</text>
+<rect x="597.0" y="92.0" width="295.0" height="96.0" rx="6" fill="#f3f2ee"/>
+<text x="611.0" y="132.0" text-anchor="start" style="font-size:26px;font-weight:600;fill:#0b0b0b;font-variant-numeric:tabular-nums">47%</text>
+<text x="611.0" y="154.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#52514e">of compaction time hidden behind a task</text>
+<text x="611.0" y="172.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#8a8884">27 min of 56 min</text>
+<rect x="290.0" y="200.0" width="295.0" height="96.0" rx="6" fill="#f3f2ee"/>
+<text x="304.0" y="240.0" text-anchor="start" style="font-size:26px;font-weight:600;fill:#0b0b0b;font-variant-numeric:tabular-nums">45s vs 53s</text>
+<text x="304.0" y="262.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#52514e">median early vs auto-compaction</text>
+<text x="304.0" y="280.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#8a8884">early 150k to 16k tokens, auto 169k to 20k</text>
+<rect x="597.0" y="200.0" width="295.0" height="96.0" rx="6" fill="#f3f2ee"/>
+<text x="611.0" y="240.0" text-anchor="start" style="font-size:26px;font-weight:600;fill:#0b0b0b;font-variant-numeric:tabular-nums">0.90</text>
+<text x="611.0" y="262.0" text-anchor="start" style="font-size:12px;font-weight:400;fill:#52514e">auto cycles replaced per early compaction</text>
+<text x="611.0" y="280.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#8a8884">72 early vs 28 auto in the same sessions</text>
+<text x="28.0" y="340.0" text-anchor="start" style="font-size:13px;font-weight:600;fill:#0b0b0b">Compactions per day, mod sessions</text>
+<rect x="28.0" y="352.0" width="10.0" height="10.0" rx="2" fill="#2a78d6"/>
+<text x="43.0" y="361.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#52514e">early 72</text>
+<rect x="109.0" y="352.0" width="10.0" height="10.0" rx="2" fill="#eb6834"/>
+<text x="124.0" y="361.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#52514e">auto 28</text>
+<rect x="183.5" y="352.0" width="10.0" height="10.0" rx="2" fill="#1baf7a"/>
+<text x="198.5" y="361.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#52514e">manual 25</text>
+<line x1="50.0" y1="578.0" x2="300.0" y2="578.0" stroke="#e4e2dc" stroke-width="1"/>
+<text x="46.0" y="582.0" text-anchor="end" style="font-size:10px;font-weight:400;fill:#8a8884;font-variant-numeric:tabular-nums">0</text>
+<line x1="50.0" y1="544.3" x2="300.0" y2="544.3" stroke="#e4e2dc" stroke-width="1"/>
+<text x="46.0" y="548.3" text-anchor="end" style="font-size:10px;font-weight:400;fill:#8a8884;font-variant-numeric:tabular-nums">5</text>
+<line x1="50.0" y1="510.7" x2="300.0" y2="510.7" stroke="#e4e2dc" stroke-width="1"/>
+<text x="46.0" y="514.7" text-anchor="end" style="font-size:10px;font-weight:400;fill:#8a8884;font-variant-numeric:tabular-nums">10</text>
+<line x1="50.0" y1="477.0" x2="300.0" y2="477.0" stroke="#e4e2dc" stroke-width="1"/>
+<text x="46.0" y="481.0" text-anchor="end" style="font-size:10px;font-weight:400;fill:#8a8884;font-variant-numeric:tabular-nums">15</text>
+<line x1="50.0" y1="443.3" x2="300.0" y2="443.3" stroke="#e4e2dc" stroke-width="1"/>
+<text x="46.0" y="447.3" text-anchor="end" style="font-size:10px;font-weight:400;fill:#8a8884;font-variant-numeric:tabular-nums">20</text>
+<line x1="50.0" y1="409.7" x2="300.0" y2="409.7" stroke="#e4e2dc" stroke-width="1"/>
+<text x="46.0" y="413.7" text-anchor="end" style="font-size:10px;font-weight:400;fill:#8a8884;font-variant-numeric:tabular-nums">25</text>
+<line x1="50.0" y1="376.0" x2="300.0" y2="376.0" stroke="#e4e2dc" stroke-width="1"/>
+<text x="46.0" y="380.0" text-anchor="end" style="font-size:10px;font-weight:400;fill:#8a8884;font-variant-numeric:tabular-nums">30</text>
+<path d="M59.5,578.0 v-80.8 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v80.8 z" fill="#2a78d6"/>
+<path d="M59.5,495.2 v-11.5 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v11.5 z" fill="#eb6834"/>
+<path d="M59.5,481.7 v-20.9 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v20.9 z" fill="#1baf7a"/>
+<text x="67.7" y="451.8" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">18</text>
+<text x="67.7" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/24</text>
+<path d="M86.8,578.0 v-87.5 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v87.5 z" fill="#2a78d6"/>
+<path d="M86.8,488.5 v-18.2 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v18.2 z" fill="#eb6834"/>
+<path d="M86.8,468.3 v-2.4 a2.3666666666666667,2.3666666666666667 0 0 1 2.3666666666666667,-2.3666666666666667 h11.7 a2.3666666666666667,2.3666666666666667 0 0 1 2.3666666666666667,2.3666666666666667 v2.4 z" fill="#1baf7a"/>
+<text x="95.0" y="458.5" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">17</text>
+<text x="95.0" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/25</text>
+<path d="M114.1,578.0 v-47.1 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v47.1 z" fill="#2a78d6"/>
+<path d="M114.1,528.9 v-24.9 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v24.9 z" fill="#eb6834"/>
+<path d="M114.1,501.9 v-14.2 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v14.2 z" fill="#1baf7a"/>
+<text x="122.3" y="478.7" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">14</text>
+<text x="122.3" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/26</text>
+<path d="M141.5,578.0 v-87.5 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v87.5 z" fill="#2a78d6"/>
+<path d="M141.5,488.5 v-18.2 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v18.2 z" fill="#eb6834"/>
+<path d="M141.5,468.3 v-61.3 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v61.3 z" fill="#1baf7a"/>
+<text x="149.7" y="397.9" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">26</text>
+<text x="149.7" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/27</text>
+<path d="M168.8,578.0 v-53.9 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v53.9 z" fill="#2a78d6"/>
+<path d="M168.8,522.1 v-31.7 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v31.7 z" fill="#eb6834"/>
+<path d="M168.8,488.5 v-14.2 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v14.2 z" fill="#1baf7a"/>
+<text x="177.0" y="465.3" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">16</text>
+<text x="177.0" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/28</text>
+<path d="M196.1,578.0 v-6.7 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v6.7 z" fill="#2a78d6"/>
+<path d="M196.1,569.3 v-14.2 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v14.2 z" fill="#eb6834"/>
+<text x="204.3" y="546.1" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">4</text>
+<text x="204.3" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/29</text>
+<path d="M223.5,578.0 v-43.1 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v43.1 z" fill="#2a78d6"/>
+<text x="231.7" y="525.9" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">7</text>
+<text x="231.7" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/30</text>
+<path d="M250.8,578.0 v-47.1 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v47.1 z" fill="#2a78d6"/>
+<path d="M250.8,528.9 v-27.7 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v27.7 z" fill="#eb6834"/>
+<text x="259.0" y="492.2" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">12</text>
+<text x="259.0" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">10/31</text>
+<path d="M278.1,578.0 v-26.9 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v26.9 z" fill="#2a78d6"/>
+<path d="M278.1,549.1 v-18.2 a0,0 0 0 1 0,0 h16.4 a0,0 0 0 1 0,0 v18.2 z" fill="#eb6834"/>
+<path d="M278.1,528.9 v-20.9 a4,4 0 0 1 4,-4 h8.4 a4,4 0 0 1 4,4 v20.9 z" fill="#1baf7a"/>
+<text x="286.3" y="498.9" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#52514e;font-variant-numeric:tabular-nums">11</text>
+<text x="286.3" y="592.0" text-anchor="middle" style="font-size:10px;font-weight:400;fill:#8a8884">11/01</text>
+<text x="324.0" y="340.0" text-anchor="start" style="font-size:13px;font-weight:600;fill:#0b0b0b">How the 84 schedules ended</text>
+<text x="494.0" y="376.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">compacted while waiting</text>
+<path d="M502.0,360.0 h54.0 a4,4 0 0 1 4,4 v16.0 a4,4 0 0 1 -4,4 h-54.0 z" fill="#2a78d6"/>
+<text x="566.0" y="376.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">72</text>
+<text x="494.0" y="410.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">preempted by auto-compact</text>
+<path d="M502.0,394.0 h2.0 a2.013888888888889,2.013888888888889 0 0 1 2.013888888888889,2.013888888888889 v20.0 a2.013888888888889,2.013888888888889 0 0 1 -2.013888888888889,2.013888888888889 h-2.0 z" fill="#c9c7bf"/>
+<text x="512.0" y="410.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">5</text>
+<text x="494.0" y="444.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">task finished first, skipped</text>
+<path d="M502.0,428.0 h1.6 a1.6111111111111112,1.6111111111111112 0 0 1 1.6111111111111112,1.6111111111111112 v20.8 a1.6111111111111112,1.6111111111111112 0 0 1 -1.6111111111111112,1.6111111111111112 h-1.6 z" fill="#c9c7bf"/>
+<text x="511.2" y="444.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">4</text>
+<text x="494.0" y="478.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">headless session, gave up</text>
+<path d="M502.0,462.0 h1.5 a1.5,1.5 0 0 1 1.5,1.5 v21.0 a1.5,1.5 0 0 1 -1.5,1.5 h-1.5 z" fill="#c9c7bf"/>
+<text x="511.0" y="478.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">2</text>
+<text x="494.0" y="512.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">superseded by a later call</text>
+<path d="M502.0,496.0 h1.5 a1.5,1.5 0 0 1 1.5,1.5 v21.0 a1.5,1.5 0 0 1 -1.5,1.5 h-1.5 z" fill="#c9c7bf"/>
+<text x="511.0" y="512.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">1</text>
+<text x="620.0" y="340.0" text-anchor="start" style="font-size:13px;font-weight:600;fill:#0b0b0b">Share of a compaction hidden by its task</text>
+<text x="762.0" y="376.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">none to a quarter</text>
+<path d="M770.0,360.0 h82.0 a4,4 0 0 1 4,4 v16.0 a4,4 0 0 1 -4,4 h-82.0 z" fill="#2a78d6"/>
+<text x="862.0" y="376.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">31</text>
+<text x="762.0" y="410.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">a quarter to half</text>
+<path d="M770.0,394.0 h23.7 a4,4 0 0 1 4,4 v16.0 a4,4 0 0 1 -4,4 h-23.7 z" fill="#2a78d6"/>
+<text x="803.7" y="410.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">10</text>
+<text x="762.0" y="444.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">half to three quarters</text>
+<path d="M770.0,428.0 h9.9 a4,4 0 0 1 4,4 v16.0 a4,4 0 0 1 -4,4 h-9.9 z" fill="#2a78d6"/>
+<text x="789.9" y="444.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">5</text>
+<text x="762.0" y="478.0" text-anchor="end" style="font-size:11px;font-weight:400;fill:#52514e">three quarters to all</text>
+<path d="M770.0,462.0 h68.1 a4,4 0 0 1 4,4 v16.0 a4,4 0 0 1 -4,4 h-68.1 z" fill="#2a78d6"/>
+<text x="848.1" y="478.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#0b0b0b;font-variant-numeric:tabular-nums">26</text>
+<text x="620.0" y="506.0" text-anchor="start" style="font-size:11px;font-weight:400;fill:#8a8884">25 of 72 fully hidden; short tasks cap the rest.</text>
+<text x="28.0" y="632.0" text-anchor="start" style="font-size:10.5px;font-weight:400;fill:#8a8884">Net saving = auto-compaction time each early compaction replaces (its freed tokens as a fraction of a median auto cycle, times the median auto duration)</text>
+<text x="28.0" y="647.0" text-anchor="start" style="font-size:10.5px;font-weight:400;fill:#8a8884">minus compaction time nobody was waiting on anyway. 116 threshold reminders were sent; 8 slow foreground commands were missed chances. Generated 2026-11-01.</text>
+</svg>
