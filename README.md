@@ -1,6 +1,6 @@
 # claude-mods
 
-A Claude Code plugin marketplace of mods (hooks-module plugins).
+A Claude Code plugin marketplace of mods: plugins that change how Claude Code behaves through hooks.
 
 | Mod | What it does |
 | --- | --- |
@@ -24,12 +24,12 @@ For another mod, replace `early-compact` with its name from the table above.
 
 In the desktop app: click + next to the prompt box, then Plugins, Add marketplace with `dreness/claude-mods`, then Add plugin.
 
-While this repository is private, installing needs read access on GitHub and a git credential for github.com on your machine (an SSH key, or `gh auth login` then `gh auth setup-git`).
-
 ## Layout
 
-Each mod lives in `plugins/<mod>/` and is listed in `.claude-plugin/marketplace.json`.
+Each mod lives in `plugins/<mod>/`, with its own README, and is listed in `.claude-plugin/marketplace.json`. `MAINTENANCE.md` declares scheduled maintenance jobs, such as the weekly refresh of early-compact's usage numbers.
+
+Bug reports and suggestions are welcome as GitHub issues.
 
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE).

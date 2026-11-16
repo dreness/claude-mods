@@ -54,7 +54,7 @@ Claude Code deletes transcripts after about 30 days, so the report also reads th
 - `compactions.csv`: every compaction boundary, from any session.
 - `events.csv`: threshold reminders, missed chances (15s+ foreground Bash above the threshold), and sessions that had the mod loaded.
 
-Live transcripts take precedence over stored rows with the same id. `--save` writes the merged rows back; a weekly upkeep job (`MAINTENANCE.md` at the repo root) runs it and commits the CSVs with the refreshed graphic. `--data` reads another folder and `--no-data` ignores it. Projects are stored as a hash of their folder name, so the report names a project only while one of its transcripts remains.
+Live transcripts take precedence over stored rows with the same id. `--save` writes the merged rows back; a weekly job (declared in `MAINTENANCE.md` at the repo root) runs it and commits the CSVs with the refreshed graphic. `--data` reads another folder and `--no-data` ignores it. Projects are stored as a hash of their folder name, so the report names a project only while one of its transcripts remains.
 
 `scripts/usage-graphic.py` draws the headline numbers as the SVG above, in a light and a dark variant:
 
