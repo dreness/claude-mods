@@ -4,7 +4,8 @@
 Scans ~/.claude/projects/**/*.jsonl (or --root) for scheduled early compactions
 (compact_while_waiting calls up to 0.2.x, scheduled notes on background Bash
 results from 0.3.0) and compaction boundaries, classifies each, and estimates
-time saved.
+time saved. Transcripts expire after about 30 days, so the records are merged with
+those stored in data/*.csv (--data); --save writes the merged set back.
 
 Time model, per early compaction:
   hidden   = overlap of the compaction with the background task it waited on
@@ -15,12 +16,14 @@ Time model, per early compaction:
 """
 
 import argparse
+import csv
+import hashlib
 import json
 import re
 import statistics
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 TOOL = 'mcp__early-compact__compact_while_waiting'
@@ -78,13 +81,13 @@ def load(path):
     return rows
 
 
-def analyze_file(path, since=0.0):
-    """Returns (invocations, boundaries, signals) for one transcript; signals count from `since`."""
+def analyze_file(path):
+    """Returns (invocations, boundaries, signals) for one transcript; signals are reminder/missed rows."""
     rows = load(path)
     events = []  # (time, kind, data) in file order
     bg_start, task_end = {}, {}
     pending_uses = {}
-    signals = Counter()
+    signals = []
     for d in rows:
         t = ts(d.get('timestamp'))
         typ = d.get('type')
@@ -100,13 +103,13 @@ def analyze_file(path, since=0.0):
             continue
         if typ == 'attachment':
             a = d.get('attachment') or {}
-            if a.get('type') == 'hook_additional_context' and (t or 0) >= since:
+            if a.get('type') == 'hook_additional_context':
                 body = ' '.join(a.get('content') or [])
                 if 'near auto-compaction' in body:
-                    signals['reminders'] += 1
+                    signals.append({'id': f"reminder:{d.get('uuid')}", 'time': t, 'kind': 'reminder'})
                     events.append((t, 'reminder', d))
                 if 'in the foreground with context above' in body:
-                    signals['missed'] += 1
+                    signals.append({'id': f"missed:{d.get('uuid')}", 'time': t, 'kind': 'missed'})
                 m = SCHEDULED_RE.search(body)
                 if m:
                     events.append((t, 'invoke', {'id': a.get('toolUseID') or d.get('uuid'), 'called': t,
@@ -159,7 +162,7 @@ def analyze_file(path, since=0.0):
             continue
         r = data['result']
         pct = re.search(r'Context is (\d+)%', r)
-        inv = {'id': data['id'], 'file': str(path), 'time': t,
+        inv = {'id': data['id'], 'time': t,
                'percent': data.get('percent', int(pct.group(1)) if pct else None), 'sidechain': sidechain}
         if 'not needed' in r:
             inv['outcome'] = 'not_needed'
@@ -261,7 +264,7 @@ def follow_scheduled(events, i, data, bg_start, task_end):
 def scan_baseline(root):
     """All compaction boundaries everywhere, plus which sessions had the mod loaded."""
     boundaries = {}
-    mod_files = set()
+    mod_files = {}  # path -> time of first trace
     for path in root.rglob('*.jsonl'):
         if '/subagents/' in str(path):
             continue
@@ -279,8 +282,132 @@ def scan_baseline(root):
                         ('near auto-compaction' in line and 'hook_additional_context' in line):
                     # 0.2.x announced itself as an MCP server; 0.3.0 leaves no trace until the
                     # threshold reminder fires, so this undercounts sessions that stayed small.
-                    mod_files.add(str(path))
+                    if str(path) not in mod_files:
+                        try:
+                            mod_files[str(path)] = ts(json.loads(line).get('timestamp'))
+                        except json.JSONDecodeError:
+                            mod_files[str(path)] = None
     return list(boundaries.values()), mod_files
+
+
+# Stored records outlive the transcripts (kept ~30 days). Types: 'time' is ISO UTC, 'list' is '; '-joined.
+STORE = {
+    'calls': ('id', {'id': str, 'time': 'time', 'session': str, 'project': str, 'sidechain': bool,
+                     'percent': int, 'outcome': str, 'why': str, 'task': str, 'task_done_first': bool,
+                     'task_start': 'time', 'task_end': 'time', 'boundary': str, 'trigger': str,
+                     'c_start': 'time', 'c_end': 'time', 'duration': float, 'pre': int, 'post': int,
+                     'turns_waited': int, 'hidden': float, 'exposed': float, 'late': 'list'}),
+    'compactions': ('uuid', {'uuid': str, 'time': 'time', 'session': str, 'trigger': str,
+                             'duration_ms': int, 'pre': int, 'post': int}),
+    # kind: reminder, missed (15s+ foreground Bash above threshold), loaded (session had the mod)
+    'events': ('id', {'id': str, 'time': 'time', 'session': str, 'kind': str}),
+}
+
+
+def enc(v, typ):
+    if v is None or (typ == 'list' and not v):
+        return ''
+    if typ == 'time':
+        return datetime.fromtimestamp(v, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+    if typ == 'list':
+        return '; '.join(v)
+    if typ is bool:
+        return '1' if v else '0'
+    if typ is float:
+        return f'{v:.3f}'
+    return str(v)
+
+
+def dec(v, typ):
+    if v == '':
+        return [] if typ == 'list' else None
+    if typ == 'time':
+        return ts(v)
+    if typ == 'list':
+        return v.split('; ')
+    if typ is bool:
+        return v == '1'
+    return typ(v)
+
+
+def load_store(folder):
+    out = {}
+    for name, (key, fields) in STORE.items():
+        path = folder / f'{name}.csv'
+        rows = {}
+        if path.exists():
+            with open(path, newline='') as f:
+                for r in csv.DictReader(f):
+                    rows[r[key]] = {k: dec(r.get(k, ''), t) for k, t in fields.items()}
+        out[name] = rows
+    return out
+
+
+def save_store(folder, data):
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, (key, fields) in STORE.items():
+        rows = sorted(data[name].values(), key=lambda r: (r.get('time') or 0, r[key]))
+        with open(folder / f'{name}.csv', 'w', newline='') as f:
+            w = csv.writer(f, lineterminator='\n')
+            w.writerow(fields)
+            for r in rows:
+                w.writerow([enc(r.get(k), t) for k, t in fields.items()])
+
+
+def collect(root):
+    """Records from the live transcripts, in store shape, plus project names by hash."""
+    def ids(path):
+        rel = Path(path).relative_to(root).parts
+        return hashlib.sha1(rel[0].encode()).hexdigest()[:10], '/'.join(rel[1:]) or rel[0]
+
+    files = [p for p in root.rglob('*.jsonl') if MENTION_RE.search(p.read_text(errors='replace'))]
+    calls, events, names = {}, {}, {}
+    for path in files:
+        project, session = ids(path)
+        names[project] = re.sub(r'^-Users-[^-]+-', '', Path(path).relative_to(root).parts[0])
+        invs, _, sig = analyze_file(path)
+        for e in sig:
+            events[e['id']] = {**e, 'session': session}
+        for inv in invs:
+            inv.update(project=project, session=session)
+            if replaces(inv, calls.get(inv['id'])):
+                calls[inv['id']] = inv
+    bounds, mod_files = scan_baseline(root)
+    compactions = {}
+    for b in bounds:
+        m = b.get('compactMetadata') or {}
+        compactions[b.get('uuid')] = {'uuid': b.get('uuid'), 'time': ts(b.get('timestamp')),
+                                      'session': ids(b['_file'])[1], 'trigger': m.get('trigger'),
+                                      'duration_ms': m.get('durationMs'), 'pre': m.get('preTokens'),
+                                      'post': m.get('postTokens')}
+    for path, t in mod_files.items():
+        session = ids(path)[1]
+        events['loaded:' + session] = {'id': 'loaded:' + session, 'time': t, 'session': session, 'kind': 'loaded'}
+    return {'calls': calls, 'compactions': compactions, 'events': events}, names, len(files)
+
+
+def replaces(new, old):
+    """Resumed or forked sessions copy history; keep the copy that saw the outcome, else the live one."""
+    if old is None:
+        return True
+    ends = lambda r: (r.get('why') or '').endswith('transcript ends')
+    if ends(new) != ends(old):
+        return ends(old)
+    return bool(old.get('_stored'))
+
+
+def merge(stored, live):
+    out = {name: dict(rows) for name, rows in stored.items()}
+    for r in out['calls'].values():
+        r['_stored'] = True
+    for inv in live['calls'].values():
+        if replaces(inv, out['calls'].get(inv['id'])):
+            out['calls'][inv['id']] = inv
+    for name in ('compactions', 'events'):
+        out[name].update(live[name])
+    for r in out['calls'].values():
+        r.pop('_stored', None)
+    return out
 
 
 def med(xs):
@@ -301,6 +428,11 @@ def iso(t):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--root', type=Path, default=Path.home() / '.claude' / 'projects')
+    ap.add_argument('--data', type=Path, default=Path(__file__).resolve().parent.parent / 'data',
+                    help='folder of stored records (calls.csv, compactions.csv, events.csv) merged with the '
+                         'transcripts, which Claude Code keeps for about 30 days')
+    ap.add_argument('--no-data', dest='data', action='store_const', const=None, help='ignore stored records')
+    ap.add_argument('--save', action='store_true', help='write the merged records back to --data')
     ap.add_argument('--json', type=Path, help='also write per-invocation records here')
     ap.add_argument('--summary', type=Path, help='also write the headline numbers here (input to usage-graphic.py)')
     ap.add_argument('--since', metavar='YYYY-MM-DD',
@@ -308,22 +440,18 @@ def main():
     args = ap.parse_args()
     since = datetime.strptime(args.since, '%Y-%m-%d').timestamp() if args.since else 0.0
 
-    files = [p for p in args.root.rglob('*.jsonl') if MENTION_RE.search(p.read_text(errors='replace'))]
-    invocations, signals = {}, Counter()
-    for path in files:
-        invs, _, sig = analyze_file(path, since)
-        signals += sig
-        for inv in invs:
-            # Resumed or forked sessions copy history; keep the copy that saw the outcome.
-            prev = invocations.get(inv['id'])
-            if prev is None or (prev.get('why', '').endswith('transcript ends') and inv['outcome'] != prev['outcome']):
-                invocations[inv['id']] = inv
-    invs = sorted((i for i in invocations.values() if (i['time'] or 0) >= since), key=lambda x: x['time'] or 0)
-
-    all_bounds, mod_files = scan_baseline(args.root)
-    for b in all_bounds:
-        b['_t'] = ts(b.get('timestamp'))
-    all_bounds = [b for b in all_bounds if (b['_t'] or 0) >= since]
+    live, names, n_files = collect(args.root)
+    data = merge(load_store(args.data) if args.data else {k: {} for k in STORE}, live)
+    if args.save:
+        save_store(args.data, data)
+    invs = sorted((i for i in data['calls'].values() if (i['time'] or 0) >= since), key=lambda x: x['time'] or 0)
+    project = lambda i: names.get(i['project'], i['project'])
+    all_bounds = [{'uuid': c['uuid'], '_t': c['time'], '_file': c['session'],
+                   'compactMetadata': {'trigger': c['trigger'], 'durationMs': c['duration_ms'],
+                                       'preTokens': c['pre'], 'postTokens': c['post']}}
+                  for c in data['compactions'].values() if (c['time'] or 0) >= since]
+    mod_files = {e['session'] for e in data['events'].values() if e['kind'] == 'loaded'}
+    signals = Counter(e['kind'] for e in data['events'].values() if (e['time'] or 0) >= since)
     ours = {i['boundary'] for i in invs if i.get('outcome') == 'compacted'}
     by_file = defaultdict(list)
     for b in all_bounds:
@@ -358,7 +486,8 @@ def main():
     first = min((i['time'] for i in invs if i['time']), default=None)
     p('# early-compact usage report\n')
     p(f'Transcripts scanned: {sum(1 for _ in args.root.rglob("*.jsonl"))} under `{args.root}`; '
-      f'{len(files)} mention the tool; {len(mod_files)} sessions had the mod loaded.')
+      f'{n_files} mention the tool; {len(mod_files)} sessions had the mod loaded'
+      f'{f" (including stored records from `{args.data}`)" if args.data else ""}.')
     if args.since:
         p(f'Ignoring calls and compactions before {args.since}.')
     p(f'First invocation: {iso(first)}. Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}.\n')
@@ -393,7 +522,7 @@ def main():
     sp = [i['percent'] for i in sched if i['percent'] is not None]
     if sp:
         p(f'Scheduled calls ran at a median {med(sp):.0f}% context (range {min(sp)}-{max(sp)}%).')
-    p(f'Reminders injected (crossed threshold): {signals["reminders"]}; '
+    p(f'Reminders injected (crossed threshold): {signals["reminder"]}; '
       f'missed-chance notes (15s+ foreground Bash above threshold): {signals["missed"]}.\n')
 
     # Baseline: compactions in sessions with the mod vs everything.
@@ -460,7 +589,7 @@ def main():
     if late:
         p('## Late compactions\n')
         for i in late:
-            p(f'- {iso(i["time"])} {Path(i["file"]).parent.name}: {"; ".join(i["late"])} '
+            p(f'- {iso(i["time"])} {project(i)}: {"; ".join(i["late"])} '
               f'(task {i.get("task")}, hidden {fmt_s(i["hidden"])} of {fmt_s(i["duration"])})')
         p('')
     if doubles:
@@ -471,7 +600,7 @@ def main():
             if pair in seen:
                 continue
             seen.add(pair)
-            p(f'- {iso(inv["time"])} {Path(inv["file"]).parent.name}: early-compact and '
+            p(f'- {iso(inv["time"])} {project(inv)}: early-compact and '
               f'{other["compactMetadata"].get("trigger")} compaction {fmt_s(gap)} apart, '
               f'{growth:,} tokens of growth between')
         p('')
@@ -483,7 +612,7 @@ def main():
         notes = '; '.join((['task done before call'] if i.get('task_done_first') else []) +
                           (['test threshold'] if (i['percent'] or 0) < DEFAULT_THRESHOLD else []) +
                           (i.get('late') or []) + (i.get('double') or []) + ([i['why']] if i.get('why') else []))
-        p(f'| {iso(i["time"])} | {Path(i["file"]).parent.name.removeprefix("-Users-andre-")} | {i["percent"]}% | '
+        p(f'| {iso(i["time"])} | {project(i)} | {i["percent"]}% | '
           f'{i["outcome"]} | {fmt_s(bg)} | {fmt_s(i.get("duration"))} | {fmt_s(i.get("hidden"))} | {notes} |')
     print('\n'.join(out))
 
@@ -503,11 +632,11 @@ def main():
             'since': args.since, 'first': iso(first), 'last': iso(max((i['time'] for i in invs if i['time']), default=None)),
             'generated': datetime.now().strftime('%Y-%m-%d %H:%M'),
             'sessions_with_mod': len(mod_files),
-            'projects': len({Path(i['file']).parent.name for i in sched}),
+            'projects': len({i['project'] for i in sched}),
             'calls': len(invs), 'not_needed': oc['not_needed'], 'scheduled': len(sched), 'compacted': len(comp),
             'late': len(late), 'doubles': sum(1 for i in comp if i.get('double')),
             'superseded': oc['superseded'], 'not_compacted': oc['not_compacted'],
-            'why': dict(why), 'reminders': signals['reminders'], 'missed': signals['missed'],
+            'why': dict(why), 'reminders': signals['reminder'], 'missed': signals['missed'],
             'early': kind([b for b in all_bounds if b.get('uuid') in ours]),
             'auto': kind(autos), 'auto_mod': kind(autos_mod), 'manual_other': kind(manual_other),
             'by_day': {d: dict(c) for d, c in sorted(by_day.items())},
