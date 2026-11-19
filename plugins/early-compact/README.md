@@ -63,6 +63,8 @@ python3 scripts/usage-report.py --since 2026-10-24 --summary summary.json > /dev
 python3 scripts/usage-graphic.py summary.json      # writes docs/usage-light.svg and docs/usage-dark.svg
 ```
 
+`scripts/refresh-usage.py` does all of it in one step, as the weekly job runs it: `--save` since 0.3.0, the SVGs, and the date range in the sentence under the graphic. It reads settings from the environment or from `.env` in this folder (copy `.env.example`; a linked git worktree uses the main checkout's), e.g. `EARLY_COMPACT_TRANSCRIPTS` for the transcript folder.
+
 ## Install
 
 At the prompt of a terminal session:
