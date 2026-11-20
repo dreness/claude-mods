@@ -25,10 +25,10 @@ Claude picks the agent on its own for those tasks, or you can ask for it by name
 
 ## scripts/swift-fields.py
 
-Lists every Swift type in a binary along with its stored fields, marked `let` or `var`, read from `__swift5_fieldmd`. It needs no extra tools and reads thin or universal (arm64 slice) binaries.
+Lists every Swift type in a binary along with its stored fields, marked `let` or `var`, read from `__swift5_fieldmd`. It needs no extra tools and reads thin or universal binaries (the arm64 slice, or the first slice when there is none).
 
 ```
-$ scripts/swift-fields.py "/Applications/Logic Pro.app/Contents/Frameworks/LogicAppFramework.framework/LogicAppFramework"
+$ python3 scripts/swift-fields.py "/Applications/Logic Pro.app/Contents/Frameworks/LogicAppFramework.framework/LogicAppFramework"
 class LogicMacAppFactory
   var projects
   var assistantAvailabilityController

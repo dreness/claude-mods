@@ -79,11 +79,11 @@ doc.closeDocument()
 
 ### Field-Tested Techniques
 - **Thin universal binaries first.** `lipo -thin arm64 BIN -output DIR.noindex/BIN` gives one slice for Hopper and for tools that map file offsets from `otool -l`, which describes only one slice.
-- **Swift `let` vs `var`.** Run `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/swift-fields.py BIN` (thin or universal). It lists each type's stored fields from `__swift5_fieldmd`. A `let` can only be written in an initializer, so once you have read the init you know every value it can hold. A `var` can be stored from anywhere, so search for stores.
+- **Swift `let` vs `var`.** Run `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/swift-fields.py" BIN` (thin or universal). It lists each type's stored fields from `__swift5_fieldmd`. A `let` can only be written in an initializer, so once you have read the init you know every value it can hold. A `var` can be stored from anywhere, so search for stores.
 - **Callers that xrefs miss.** Swift class methods are called through the vtable, so Hopper shows no xrefs. Find the class metadata, which in `nm`/Hopper is `type metadata for X` and is preceded by its field-offset vector. Work out the method's slot offset from the class descriptor's vtable. Then scan `otool -tV` output for `ldr xN, [xM, #SLOT]` followed by `blr xN`. Check each hit's receiver: other classes use the same slot offset.
 - **ObjC layout.** `otool -oV BIN` dumps classes, ivars with their offsets and types, properties, and method lists without Hopper.
 - **Exports.** `nm -gU BIN | xcrun swift-demangle` shows what a framework exposes to other images. `codesign -d --entitlements - BIN` shows the entitlements.
-- **Byte and string scans.** Use `rg -a` or a short `python3` script. `grep` here may be ugrep, which rejects long bounded repeats such as `{0,200}`. Plain `strings` misses UTF-16 and short strings, and keyword hits inside C++ symbols such as `bad_function_call` are false positives.
+- **Byte and string scans.** Use a short `python3` script, or `rg -a` if ripgrep is installed. `grep` here may be ugrep, which rejects long bounded repeats such as `{0,200}`. Plain `strings` misses UTF-16 and short strings, and keyword hits inside C++ symbols such as `bad_function_call` are false positives.
 - **Prompts and model config.** Search for FoundationModels use (`LanguageModelSession`, `Instructions`) and for long English strings in `__TEXT,__cstring` and `__swift5_reflstr`. Text that isn't in the bundle may be downloaded at runtime or shipped with the OS.
 
 ### Technical Approach
