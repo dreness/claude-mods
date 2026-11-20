@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# ABOUTME: Tests swift-fields.py against Swift and C dylibs compiled at test time.
+# ABOUTME: Covers thin arm64, universal, and non-Swift inputs.
 """Tests for scripts/swift-fields.py against freshly compiled Swift binaries.
 
 Run: python3 -m unittest discover -s plugins/macos-reverser/tests

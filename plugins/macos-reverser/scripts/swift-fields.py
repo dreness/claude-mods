@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# ABOUTME: Lists Swift types and stored fields (let/var) from a Mach-O's field metadata.
+# ABOUTME: Reads thin or universal binaries without external tools.
 """List Swift types and their stored fields from a Mach-O's __swift5_fieldmd section.
 
 Each field shows whether it is a `let` (only writable in an initializer) or a

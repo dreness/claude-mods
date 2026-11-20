@@ -1,10 +1,11 @@
 # claude-mods
 
-A Claude Code plugin marketplace of mods: plugins that change how Claude Code behaves through hooks.
+A Claude Code plugin marketplace of mods: plugins that change how Claude Code behaves or add agents to it.
 
 | Mod | What it does |
 | --- | --- |
 | <img src="plugins/early-compact/.claude-plugin/icon.png" alt="" width="20"> [early-compact](plugins/early-compact) | Compacts the conversation while a backgrounded command runs, ahead of the auto-compact threshold. |
+| [macos-reverser](plugins/macos-reverser) | An agent that reverse-engineers macOS binaries and apps with Hopper Disassembler and the command-line tools. |
 
 ## Install
 

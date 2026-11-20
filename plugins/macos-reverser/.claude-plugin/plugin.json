@@ -1,0 +1,9 @@
+{
+  "name": "macos-reverser",
+  "version": "0.1.0",
+  "description": "An agent that reverse-engineers macOS binaries and apps with Hopper Disassembler and the command-line tools.",
+  "author": {
+    "name": "Andre LaBranche"
+  },
+  "license": "MIT"
+}

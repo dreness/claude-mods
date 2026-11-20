@@ -9,6 +9,11 @@
       "name": "early-compact",
       "source": "./plugins/early-compact",
       "description": "Compacts the conversation while a backgrounded command runs, ahead of the auto-compact threshold."
+    },
+    {
+      "name": "macos-reverser",
+      "source": "./plugins/macos-reverser",
+      "description": "An agent that reverse-engineers macOS binaries and apps with Hopper Disassembler and the command-line tools."
     }
   ]
 }
