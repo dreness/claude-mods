@@ -2,7 +2,13 @@
 
 Adds the `macos-reverser:macos-binary-reverser` agent. It reverse-engineers macOS binaries and app bundles with Hopper Disassembler and the Xcode command-line tools (`otool`, `nm`, `lipo`, `codesign`). Use it to learn how an app implements something, pull out strings and resources, check behavior, or look into a suspicious binary.
 
-Claude picks the agent on its own for those tasks, or you can ask for it by name.
+Claude picks the agent on its own for those tasks, or you can ask for it by name. For a session spent mostly on reverse engineering, run the agent as the main session:
+
+```
+claude --agent macos-reverser:macos-binary-reverser
+```
+
+In our evals this cost 0.4 to 0.7x as much and took about half the time of a session without the plugin, with equal or better answers. Curiously, running this way also seems to result in fewer refusals...
 
 ## Install
 
@@ -10,6 +16,10 @@ Claude picks the agent on its own for those tasks, or you can ask for it by name
 /plugin marketplace add dreness/claude-mods
 /plugin install macos-reverser@claude-mods
 ```
+
+## Model fallback
+
+On Opus 5.5, Claude Code's cyber safeguard can flag reverse-engineering requests, particularly ones about stripped binaries. When it does, the session switches to an earlier Opus model for the rest of the session. This is expected behavior, not a plugin error, and the work still gets done.
 
 ## Requirements
 
