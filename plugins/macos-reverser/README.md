@@ -7,7 +7,8 @@ Claude picks the agent on its own for those tasks, or you can ask for it by name
 ## Install
 
 ```
-/plugin install macos-reverser --marketplace dreness/claude-mods
+/plugin marketplace add dreness/claude-mods
+/plugin install macos-reverser@claude-mods
 ```
 
 ## Requirements
@@ -51,6 +52,6 @@ class EphemeralStore : SessionStore  (descriptor 0x100001ca4)
 
 ## scripts/hopper-close.sh
 
-`hopper-close.sh BIN...` closes the Hopper documents loaded from those files, without saving. Neither the MCP server nor AppleScript can close documents. The script compiles a tiny arm64 stub with `clang` and loads it in Hopper without analysis, and the stub's Python script closes the targets and itself. It takes about 2s. Run it after analysis ends: a stub loaded during analysis never runs its script.
+`hopper-close.sh BIN...` closes the Hopper documents loaded from those files, without saving. It skips documents that have a saved database. Neither the MCP server nor AppleScript can close documents. The script compiles a tiny arm64 stub with `clang` and loads it in Hopper without analysis, and the stub's Python script closes the targets and itself. It takes about 2s. Run it after analysis ends: a stub loaded during analysis never runs its script.
 
 Tests: `python3 -m unittest discover -s plugins/macos-reverser/tests`. They compile small Swift and C dylibs, so they need `swiftc` and `clang`.

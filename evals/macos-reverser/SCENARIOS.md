@@ -298,10 +298,109 @@ The base pilot scored 12/12 ($2.11, 77 turns, 445s). It found every function by 
 
 The plugin run also scored 12/12, but cost $2.56 (70 turns) and took 3015s, of which 499s was API time. About 40 minutes went to closing its Hopper document: the prompt's recipe (`hopper -A ... -e BIN -Y close.py`) opens a second copy of the 23MB target, and the script waits for that load. Hopper also crashed and relaunched once. Hopper was not running at the start of this run, but was for the base run. The cost gap ($0.45) is n=1.
 
-Fix (cm-hrq.7): `scripts/hopper-close.sh` loads a tiny thin arm64 stub without analysis and runs the close script from it, about 2s. A stub loaded while a target is still analyzing becomes an empty document and its script never runs, so the script times out with a message in that case. Plugin rerun (C-plugin-2, Hopper not running at start): 12/12, $2.04, 57 turns, 347s wall; `hopper-close.sh` reported "closed 1". This beats the base pilot ($2.11, 77 turns, 445s) at n=1.
+Fix: `scripts/hopper-close.sh` loads a tiny thin arm64 stub without analysis and runs the close script from it, about 2s. A stub loaded while a target is still analyzing becomes an empty document and its script never runs, so the script times out with a message in that case. Plugin rerun (C-plugin-2, Hopper not running at start): 12/12, $2.04, 57 turns, 347s wall; `hopper-close.sh` reported "closed 1". This beats the base pilot ($2.11, 77 turns, 445s) at n=1.
 
 ### Takeaways (round 2)
 
 - **Ship gate:** v2 is at parity with base on B (cost, turns and score) and keeps A's 5x advantage.
-- **Scenario C:** parity after the close fix (cm-hrq.7); n=1 per arm.
+- **Scenario C:** parity after the close fix; n=1 per arm.
 - **Too much guidance hurts.** Generic analysis checklists made the agent gather more evidence than the question needed. What pays is knowledge the model lacks (vtable dispatch, identical-code folding, Hopper mechanics).
+
+## Round 3, 2026-11-21
+
+The agent prompt for this round fixes the `nm` heuristic (`nm -U`), adds the arm64e and x86_64 vtable call-site patterns, and changes the Hopper close rules. Each run dir enabled the plugin or not through `.claude/settings.json`, with `--setting-sources project`, an empty `--strict-mcp-config`, and WebFetch/WebSearch disallowed. Answer keys and other run dirs were `chmod 000` during runs. In the audit, the only plugin-path accesses were runs executing the scripts.
+
+Arms:
+- **base:** no plugin.
+- **forced:** `--agent macos-reverser:macos-binary-reverser`.
+- **routed:** plugin enabled, no `--agent`, so the main session decides whether to delegate.
+
+### New scenarios
+
+**E: draw.io update check (Electron, 8 pts).** draw.io 20.8.16. Prompt: how it checks for updates (trigger, feed, auto-download), every way to turn the check off (including the persisted setting key and file), and what the user sees. The answer is JavaScript in `Contents/Resources/app.asar` (`drawio/src/main/webapp/electron.js`). It tests whether the plugin pushes Mach-O work onto an app whose logic isn't native. Key:
+1. `electron-updater` runs a check on `app` `'ready'` unless disabled, plus the "Check for updates" menu item and IPC `checkForUpdates`. The feed is GitHub `jgraph/drawio-desktop`, with `autoDownload = false`.
+2. Off switches:
+   - env `DRAWIO_DISABLE_UPDATE=true`
+   - `/.flatpak-info` (Linux only)
+   - the `disableUpdate.js` build switch (false in this build)
+   - the electron-store key `dontCheckUpdates` in `~/Library/Application Support/draw.io/config.json`, set by "Don't Ask Again"
+3. The user sees Ok / Cancel / Don't Ask Again, then a progress bar, then Install / Later. Install calls `quitAndInstall`.
+4. Cites `app.asar` and `electron.js`.
+
+**F: arm64e vault (16 pts).** This is Scenario A's `Vault.swift` built with `swiftc -O -target arm64e-apple-macos14 -module-name Vault` and stripped, so it is a thin arm64e build. CLI only. The prompt is A's, minus "arm64 slice" and with Hopper excluded. On arm64e, call sites authenticate with a per-method discriminator, so `logout` and `rotateLogs` are not folded. SessionStore.reset is slot `+0xa8` with discriminator `0xb532`, and AuditLog.reset uses the same slot with `0xb36e`. Key:
+1. Fields as in A.
+2. Direct dispatchers:
+   - `0x100000f70` (site `0xfa0`)
+   - `0x10000198c` (site `0x19d8`, only when code == 401)
+3. `0x100001950` logout (site `0x197c`). `0x100001aa0` rotateLogs dispatches AuditLog.reset only; listing it costs the point.
+4. `0x100000e04` run reaches reset indirectly.
+5. Implementations are `0x100001238` (`""`, 0) and `0x1000013b4` EphemeralStore (`"ephemeral"`, -1). Listing `0x10000181c` AuditLog.reset costs the point.
+6. Token writers:
+   - the two resets
+   - `0x10000129c` refresh
+   - `0x100001a30` adoptToken, which reaches setter `0x100001018` through slot `+0x70`
+   - modify `0x10000106c`, which has no caller
+7. Values as in A.
+8. Evidence quality as in A.
+
+**A-cli (16 pts):** Scenario A's target and key, with Hopper excluded.
+
+**R: iTerm2 signing (routing, 6 pts).** Prompt: is `/Applications/iTerm.app` sandboxed and hardened, what is its team ID, and what are its entitlements. Key:
+1. Not sandboxed; hardened runtime (`0x10000(runtime)`).
+2. Team `H7V7XYVQ7D`.
+3. All 9 entitlements:
+   - application-groups `H7V7XYVQ7D.iTerm`
+   - automation.apple-events
+   - cs.allow-jit
+   - device.audio-input
+   - device.camera
+   - personal-information.addressbook
+   - personal-information.calendars
+   - personal-information.location
+   - personal-information.photos-library
+
+It checks that the plugin doesn't make a one-command question expensive.
+
+### Results
+
+| Scenario | Arm | Model | n | Score | Mean cost | Mean wall |
+|---|---|---|---|---|---|---|
+| R | base | 5.5 | 2 | 6/6 | $0.08 | 13s |
+| R | routed | 5.5 | 2 | 6/6, no delegation | $0.08 | 15s |
+| E | base | 5.5 | 2 | 8/8 | $0.42 | 89s |
+| E | forced | 5.5 | 2 | 8/8 | $0.47 | 82s |
+| F | forced | 5.5 | 2 | 16/16 | $0.56 | 97s |
+| F | base | 4.8 (pinned) | 2 | 12, 16 | $2.62 | 610s |
+| F | forced | 4.8 (pinned) | 2 | 16/16 | $1.76 | 393s |
+| A-cli | forced | 5.5 | 1 | 16/16 | $0.52 | 101s |
+| A-cli | base | 4.8 (pinned) | 1 | 15/16 | $4.16 | 1058s |
+| A-cli | forced | 4.8 (pinned) | 1 | 15/16 | $1.63 | 434s |
+
+The F base run that scored 12 said EphemeralStore has no reset override. That cost it item 5 and half of items 6 and 7. Both A-cli 4.8 runs lost a point on item 8 for unflagged method names.
+
+None of the E runs disassembled the Electron binary. Both arms went straight to `app.asar`. The plugin neither helped nor hurt there.
+
+### Opus 5.5 cyber safeguard
+
+On 5.5, the base and routed arms of F and A-cli could not run. The safeguard stopped the first response of every one of them (4 of 4), and Claude Code fell back to `claude-opus-4-8` for the rest of the session (`model_refusal_fallback`, category `cyber`). That is why the base rows above are pinned to 4.8. Forced-agent runs were never flagged, and neither were E or R.
+
+A first-turn probe isolated the cause. It ran the same F and A-cli prompts on 5.5 and stopped after the first response; n=6 per condition (3 per prompt). The variants were loaded as throwaway `--plugin-dir` plugins:
+
+| System prompt | Flagged |
+|---|---|
+| default Claude Code | 6/6 |
+| `--system-prompt "You are a helpful assistant."` | 6/6 |
+| agent with body "You are a helpful assistant." | 6/6 |
+| agent with only the role paragraph | 3/6 |
+| full agent prompt | 0/6 |
+| agent prompt without the Hopper section | 0/6 |
+| default + `--append-system-prompt` with the full agent body | 0/6 |
+
+So the agent's technique content keeps 5.5 from flagging. Replacing the default system prompt does not, and the role line alone helps only partly. The routed arm doesn't get this benefit, because the main session answers the prompt, and gets flagged, before it would delegate.
+
+### Takeaways (round 3)
+
+- **At pinned 4.8, the plugin cuts cost and time.** On F and A-cli it cost 0.4 to 0.7x as much and took 0.4 to 0.6x the wall time, at an equal or better score.
+- **On 5.5, the forced agent is the only arm that runs on 5.5 at all for stripped-binary prompts.** It does this at about $0.55 and 100s.
+- **No regressions on E or R.** The plugin didn't send an Electron question to Mach-O tools, and the routed main session answered the signing question itself.
+- **Routing is the weak spot.** For stripped-binary prompts, the main session gets flagged before it can delegate. Installing the plugin doesn't stop the fallback unless the user calls the agent directly.
