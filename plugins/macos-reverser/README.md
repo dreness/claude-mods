@@ -21,7 +21,7 @@ Claude picks the agent on its own for those tasks, or you can ask for it by name
 
   The server talks to the running Hopper app over XPC. Hopper must be open with the binary loaded.
 - Xcode command-line tools (`xcode-select --install`).
-- `python3` for `scripts/swift-fields.py`.
+- `python3` for `scripts/swift-fields.py` and `scripts/swift-vtable.py`.
 
 ## scripts/swift-fields.py
 
@@ -34,5 +34,23 @@ class LogicMacAppFactory
   var assistantAvailabilityController
 ...
 ```
+
+## scripts/swift-vtable.py
+
+Lists each Swift class's vtable from `__swift5_types`: the slot's byte offset in the class metadata (the `#SLOT` in `ldr xN, [xM, #SLOT]` before a `blr`), its kind and its implementation address, plus override entries with the base-class slot they replace. Works on stripped binaries; names implementations when symbols are present.
+
+```
+$ python3 scripts/swift-vtable.py vault
+class SessionStore  (descriptor 0x100001c20)
+  +0x68  getter         0x100000eb8
+...
+  +0xa8  method         0x1000010b0
+class EphemeralStore : SessionStore  (descriptor 0x100001ca4)
+  override +0xa8 SessionStore method         0x1000011a0
+```
+
+## scripts/hopper-close.sh
+
+`hopper-close.sh BIN...` closes the Hopper documents loaded from those files, without saving. Neither the MCP server nor AppleScript can close documents. The script compiles a tiny arm64 stub with `clang` and loads it in Hopper without analysis, and the stub's Python script closes the targets and itself. It takes about 2s. Run it after analysis ends: a stub loaded during analysis never runs its script.
 
 Tests: `python3 -m unittest discover -s plugins/macos-reverser/tests`. They compile small Swift and C dylibs, so they need `swiftc` and `clang`.

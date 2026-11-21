@@ -3,7 +3,8 @@
 
 Each field shows whether it is a `let` (only writable in an initializer) or a
 `var`, which tells you whether a store outside init can exist at all. Enum
-cases show as `case`. Universal binaries are read from their arm64 slice, or
+cases show as `case`. Classes show their superclass and are listed even with no
+stored fields. Universal binaries are read from their arm64 slice, or
 from their first slice when there is no arm64 one.
 
 Usage: swift-fields.py BINARY
@@ -58,22 +59,81 @@ def pick_slice(data):
     return slices[0]
 
 
+MAX_WORDS = 26
+
+
+def add_words(words, text):
+    """Record the words of a literal identifier part, as the demangler does, for later word substitutions."""
+    start = -1
+    for i in range(len(text) + 1):
+        c = text[i] if i < len(text) else ""
+        if start >= 0 and (c in ("_", "") or (not text[i - 1].isupper() and c.isupper())):
+            if i - start >= 2 and len(words) < MAX_WORDS:
+                words.append(text[start:i])
+            start = -1
+        if start < 0 and c and not c.isdigit() and c != "_":
+            start = i
+
+
+def read_natural(mangled, pos):
+    end = pos
+    while end < len(mangled) and mangled[end].isdigit():
+        end += 1
+    return (int(mangled[pos:end]), end) if end > pos else (None, pos)
+
+
+def read_identifier(mangled, pos, words):
+    """Decode one identifier at pos: (name, new pos), or (None, pos) if there is none.
+
+    `0` starts an identifier with word substitutions: lowercase letters a-z pick earlier
+    words and an uppercase letter picks the last one, mixed with literal NATURAL+text parts.
+    """
+    if pos >= len(mangled) or not mangled[pos].isdigit():
+        return None, pos
+    subst = mangled[pos] == "0"
+    if subst:
+        pos += 1
+        if mangled[pos:pos + 1] == "0":  # punycode
+            return None, pos
+    name = ""
+    while True:
+        while subst and pos < len(mangled) and mangled[pos].isalpha():
+            c = mangled[pos]
+            index = ord(c.lower()) - ord("a")
+            if index >= len(words):
+                return None, pos
+            name += words[index]
+            subst = c.islower()
+            pos += 1
+        if mangled[pos:pos + 1] == "0":
+            pos += 1
+            break
+        length, end = read_natural(mangled, pos)
+        if not length or end + length > len(mangled):
+            if name and not subst:  # identifier ended with an uppercase substitution
+                break
+            return None, pos
+        part = mangled[end:end + length]
+        add_words(words, part)
+        name, pos = name + part, end + length
+        if not subst:
+            break
+    return name, pos
+
+
 def nominal_name(mangled):
     """Innermost name in a plain nominal type mangling such as 10Foundation4DateV; None for anything else."""
     if mangled in STDLIB_TYPES:
         return STDLIB_TYPES[mangled]
     pos = 2 if mangled.startswith("So") else 0
-    name = None
+    name, words = None, []
     while pos < len(mangled):
         c = mangled[pos]
-        if "1" <= c <= "9":
-            end = pos
-            while end < len(mangled) and mangled[end].isdigit():
-                end += 1
-            length = int(mangled[pos:end])
-            if end + length > len(mangled):
+        if c.isdigit():
+            ident, pos = read_identifier(mangled, pos, words)
+            if ident is None:
                 return None
-            name, pos = mangled[end:end + length], end + length
+            name = ident
         elif c in "VCO" and name:
             pos += 1
         else:
@@ -221,7 +281,9 @@ def field_descriptors(image):
             flags = image.u32(record)
             name = image.relative(record + 8)
             fields.append((flags, image.cstring(name).decode() if name else "?"))
-        yield kind, image.type_name(type_ref) if type_ref else "?", fields
+        superclass = image.relative(pos + 4)
+        name = image.type_name(type_ref) if type_ref else "?"
+        yield kind, name, image.type_name(superclass) if superclass else None, fields
         pos += 16 + count * record_size
 
 
@@ -234,10 +296,11 @@ def main(argv):
             data = f.read()
         offset, size = pick_slice(data)
         image = Image(data[offset:offset + size])
-        for kind, name, fields in field_descriptors(image):
-            if not fields:
+        for kind, name, superclass, fields in field_descriptors(image):
+            is_class = KINDS.get(kind) == "class"
+            if not fields and not is_class:
                 continue
-            print(f"{KINDS.get(kind, f'kind{kind}')} {name}")
+            print(f"{KINDS.get(kind, f'kind{kind}')} {name}" + (f" : {superclass}" if is_class and superclass else ""))
             for flags, field in fields:
                 keyword = "case" if kind in ENUM_KINDS else ("var" if flags & FIELD_IS_VAR else "let")
                 print(f"  {keyword} {field}")

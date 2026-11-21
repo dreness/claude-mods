@@ -42,6 +42,11 @@ public struct Box<T> {
 public struct Frame {
     public var size: CGSize
 }
+open class Base {
+    public var count = 0
+    public init() {}
+}
+public final class Derived: Base {}
 """
 
 EXPECTED = """class Sample
@@ -59,6 +64,9 @@ struct Label
   let text
 struct Frame
   var size
+class Base
+  var count
+class Derived : Base
 struct CGSize
   var width
   var height
@@ -151,6 +159,14 @@ class SymbolNameTest(unittest.TestCase):
         self.assertEqual(self.sf.symbol_type_name("_$sSo7CGPointVMn"), "CGPoint")
         self.assertEqual(self.sf.symbol_type_name("_$sSiMn"), "Int")
         self.assertEqual(self.sf.symbol_type_name("_$s7SwiftUI4ViewP4BodyQzMn"), "_$s7SwiftUI4ViewP4BodyQzMn")
+
+    def test_word_substitutions_expand(self):
+        # Expected names checked against xcrun swift-demangle.
+        self.assertEqual(self.sf.nominal_name("14Emoji_Megademo0A13TextureVertexV"), "EmojiTextureVertex")
+        self.assertEqual(self.sf.nominal_name("12Pixel_Script0B4ViewV"), "ScriptView")
+        self.assertEqual(self.sf.nominal_name("10CustomDump0aB11ReflectableV"), "CustomDumpReflectable")
+        self.assertEqual(self.sf.nominal_name("10AnyCodable01_A9DecodableV"), "_AnyDecodable")
+        self.assertIsNone(self.sf.nominal_name("3Foo0C3BarV"))  # word index out of range
 
     def test_nested_type_names_the_innermost(self):
         self.assertEqual(self.sf.nominal_name("7Fixture3BoxV5LabelV"), "Label")
