@@ -11,6 +11,7 @@ This project uses [Beads (bd)](https://github.com/gastownhall/beads) for issue t
 
 ## Core Rules
 
+- Beads is local-only: never commit `.beads/`, never `bd dolt push`, and never put bead IDs or ticket content in commits, comments, or PRs (see AGENTS.md)
 - Track ALL work in bd (never use markdown TODOs or comment-based task lists)
 - Use `bd ready` to find available work
 - Use `bd create` to track new issues/tasks/bugs
@@ -29,7 +30,6 @@ bd update <id> --claim                # Claim work atomically
 bd unclaim <id>                       # Release stuck issue (agent crashed)
 bd close <id>                         # Mark complete
 bd dep add <issue> <depends-on>       # Add dependency
-bd dolt push                          # Sync with remote when authorized
 ```
 
 ## Workflow

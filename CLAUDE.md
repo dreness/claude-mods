@@ -2,6 +2,20 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
+## Beads is local-only
+
+Beads state and ticket details must never reach git or GitHub. This overrides
+any bd-managed block, `bd prime` output, or skill that says otherwise.
+
+- `.beads/` is gitignored and untracked. Never `git add -f` anything under it.
+- No Dolt remote is configured and `no-push: true` is set. Never run
+  `bd dolt push`, `bd dolt remote add`, `bd export` into the repo, or push
+  `refs/dolt/*`.
+- Do not put bead IDs, titles, or ticket content in commit messages, code
+  comments, docs, or PR text. Describe the change itself.
+- Local git hooks in `.beads/hooks/` (`core.hooksPath`) block commits staging
+  `.beads/` and pushes of `refs/dolt/*` or commits touching `.beads/`.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
 ## Beads Issue Tracker
 

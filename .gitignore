@@ -3,7 +3,8 @@
 .env
 __pycache__/
 
-# Beads / Dolt files (added by bd init)
+# Beads is local-only; nothing under .beads/ is committed
+.beads/
 .dolt/
 *.db
 .beads-credential-key
