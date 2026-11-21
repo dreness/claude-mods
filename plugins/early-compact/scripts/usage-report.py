@@ -5,7 +5,8 @@ Scans ~/.claude/projects/**/*.jsonl (or --root) for scheduled early compactions
 (compact_while_waiting calls up to 0.2.x, scheduled notes on background Bash
 results from 0.3.0) and compaction boundaries, classifies each, and estimates
 time saved. Transcripts expire after about 30 days, so the records are merged with
-those stored in data/*.csv (--data); --save writes the merged set back.
+those stored as CSV in --data ($EARLY_COMPACT_DATA, default
+~/.local/share/early-compact); --save writes the merged set back.
 
 Time model, per early compaction:
   hidden   = overlap of the compaction with the background task it waited on
@@ -19,6 +20,7 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import statistics
 import sys
@@ -428,7 +430,8 @@ def iso(t):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--root', type=Path, default=Path.home() / '.claude' / 'projects')
-    ap.add_argument('--data', type=Path, default=Path(__file__).resolve().parent.parent / 'data',
+    ap.add_argument('--data', type=Path,
+                    default=Path(os.environ.get('EARLY_COMPACT_DATA', '~/.local/share/early-compact')).expanduser(),
                     help='folder of stored records (calls.csv, compactions.csv, events.csv) merged with the '
                          'transcripts, which Claude Code keeps for about 30 days')
     ap.add_argument('--no-data', dest='data', action='store_const', const=None, help='ignore stored records')

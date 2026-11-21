@@ -9,3 +9,6 @@ __pycache__/
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# early-compact usage records; stored in $EARLY_COMPACT_DATA
+plugins/early-compact/data/

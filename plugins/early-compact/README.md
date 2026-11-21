@@ -48,13 +48,13 @@ python3 scripts/usage-report.py --json calls.json   # also write one record per 
 
 `--root` reads transcripts from another folder.
 
-Claude Code deletes transcripts after about 30 days, so the report also reads the records it was computed from, stored as CSV in `data/`:
+Claude Code deletes transcripts after about 30 days, so the report also reads the records it was computed from, stored as CSV outside the repo in `$EARLY_COMPACT_DATA` (default `~/.local/share/early-compact`):
 
 - `calls.csv`: one row per early-compact call, with its outcome, task span and compaction.
 - `compactions.csv`: every compaction boundary, from any session.
 - `events.csv`: threshold reminders, missed chances (15s+ foreground Bash above the threshold), and sessions that had the mod loaded.
 
-Live transcripts take precedence over stored rows with the same id. `--save` writes the merged rows back; a weekly job (declared in `MAINTENANCE.md` at the repo root) runs it and commits the CSVs with the refreshed graphic. `--data` reads another folder and `--no-data` ignores it. Projects are stored as a hash of their folder name, so the report names a project only while one of its transcripts remains.
+Live transcripts take precedence over stored rows with the same id. `--save` writes the merged rows back; a weekly job (declared in `MAINTENANCE.md` at the repo root) runs it and commits only the refreshed graphic; the CSVs never leave the host. `--data` reads another folder and `--no-data` ignores it. Projects are stored as a hash of their folder name, so the report names a project only while one of its transcripts remains.
 
 `scripts/usage-graphic.py` draws the headline numbers as the SVG above, in a light and a dark variant:
 
@@ -63,7 +63,7 @@ python3 scripts/usage-report.py --since 2026-10-24 --summary summary.json > /dev
 python3 scripts/usage-graphic.py summary.json      # writes docs/usage-light.svg and docs/usage-dark.svg
 ```
 
-`scripts/refresh-usage.py` does all of it in one step, as the weekly job runs it: `--save` since 0.3.0, the SVGs, and the date range in the sentence under the graphic. It reads settings from the environment or from `.env` in this folder (copy `.env.example`; a linked git worktree uses the main checkout's), e.g. `EARLY_COMPACT_TRANSCRIPTS` for the transcript folder.
+`scripts/refresh-usage.py` does all of it in one step, as the weekly job runs it: `--save` since 0.3.0, the SVGs, and the date range in the sentence under the graphic. It reads settings from the environment or from `.env` in this folder (copy `.env.example`; a linked git worktree uses the main checkout's), e.g. `EARLY_COMPACT_TRANSCRIPTS` for the transcript folder and `EARLY_COMPACT_DATA` for the stored records.
 
 ## Install
 
