@@ -1,6 +1,6 @@
 # macos-binary-reverser scenarios
 
-These are two repeatable tasks for measuring the agent prompt in `agents/macos-binary-reverser.md`. Each one has a fixed target, a verbatim prompt, and an answer key built without the agent's methods.
+These are repeatable tasks for measuring the agent prompt in `agents/macos-binary-reverser.md`. Each one has a fixed target, a verbatim prompt, and an answer key built without the agent's methods.
 
 This file contains the answers. It lives outside the plugin directory so an installed plugin can't expose it.
 
@@ -120,6 +120,63 @@ Prompt (no Hopper, no network):
 6. **Objective-C side.**
    - `iTermAIAvailabilityProbe` (Swift `AIAvailabilityProbe`) has `+check`. It returns whether the system model is available.
    - The UI element is `GeneralPreferencesViewController._aiSafetyCheck` (`NSButton`, a checkbox), which is enabled only when `+check` is true.
+
+## Scenario D: mdworker_shared lifecycle (system binary + runtime, fact-finding)
+
+Target: macOS 27.2.1 (26B131), `/System/Library/Frameworks/CoreServices.framework/Frameworks/Metadata.framework/Versions/A/Support/mds`, CFBundleVersion 2465.1.9.400.
+- Slices: arm64e and arm64e.x1. Fat sha256 `0b4ad85d...5028`, thinned arm64e `f34bae91...a816`.
+- Local symbols are stripped. ObjC metadata survives. `otool -oV` doesn't resolve selectors in this binary (relative method lists); `xcrun dyld_info -objc` gives method names with IMP addresses.
+- `mds_create_timer` lives in SpotlightServerKit, which exists only in the dyld shared cache. `xcrun dyld_info -disassemble <framework path>` reads it from there.
+
+The key was derived from the binary and from `log show`. Whether these numbers are public web lore wasn't checked; runs are offline, so that matters only for training-data recall.
+
+Prompt (no network; Hopper allowed but not required):
+
+> Spotlight's `mdworker_shared` processes on this Mac (macOS 27.2.1) keep appearing and disappearing. Using the shipped binaries and the live system only, find out:
+> 1. Which process causes each `mdworker_shared` instance to start, and the mechanism, including how separate instances are distinguished.
+> 2. How the instance identifier in launchd labels such as `com.apple.mdworker.shared.0A000000-0200-0000-0000-000000000000` is built. Decode that example.
+> 3. How workers end: which process ends them, and how.
+> 4. How long an idle worker lives. Give both the value in code and the lifetime you can observe, and explain any difference.
+> 5. Whether a worker that keeps getting work is ever replaced, and what triggers that.
+> For each answer, give the evidence: method names, addresses, and log lines.
+
+### Answer key (2 points per item, 12 total)
+
+1. **Spawner.** `mds` causes the spawn.
+   - `-[MDSPluginImporter makeSureWorkerIsRunning]` (IMP `0x100091360`) calls `bootstrap_look_up3` at `0x100091594`.
+   - The arguments are the per-user bootstrap, `"com.apple.mdworker.shared"`, an instance UUID, and flags `0x120`.
+   - The launchd plist sets `MultipleInstances`, and launchd logs "Successfully spawned mdworker_shared[pid] because ipc (mach)".
+   - Names for the `0x120` flag bits are not required.
+   - 1 point for "launchd on demand" without `mds` and the instance lookup.
+2. **UUID.** 16 bytes: int32 importer index (`_index`), then int32 `_count % 8`, then 8 zero bytes. `_count` increments on every launch.
+   - The example decodes to importer 10, launch count 2 (mod 8).
+   - Runtime evidence: consecutive launches of one importer show `1D000000-0300`, `-0400`, `-0500`.
+   - 1 point without the mod-8 wrap.
+3. **Termination.** `mds` sends `kill(pid, SIGKILL)`.
+   - There are 4 sites: `0x10008ff38` (busy), `0x1000903ac` (idle timer block), `0x100092d2c` (recycle), `0x100093a74` ("importer took too long").
+   - launchd logs "exited due to SIGKILL | sent by mds[pid], ran for 42030ms".
+   - Saying workers exit by themselves scores 0. The worker's own 30 s "Bundle finder timing out on no work" `exit(0)` belongs to another mode, and citing it as the normal path scores 0.
+4. **Idle lifetime.**
+   - The timer is created in `addRunLoopSources` via `mds_create_timer` (5 s leeway, `DISPATCH_TIMER_STRICT`).
+   - It is armed with `dispatch_time(now, 37 s)` when the worker goes idle (`sendWorkIfPossible`, `0x100093f98`) and disarmed when work is sent.
+   - Observed lifetimes have a sharp floor at 42.0-42.1 s (45 of 95 in 6 h), which is 37 s + the 5 s leeway.
+   - 1 point for only one of 37 / 42.
+5. **Recycle.**
+   - `_workIssuedOnThisPid` increments on every work send.
+   - At `>= 1024` (`cmp w9, #0x400` near `0x100094bb8`), it sets `_mightNeedWorkerRecycle`. The worker is then SIGKILLed before more work is sent ("MDSImporter:%d recycling worker at age %f"), and a new instance starts.
+   - Optional: the flag is also set on an importer-details change or a migration-home change.
+   - Whether one work send is exactly one file is not scored.
+6. **Evidence quality.** Says which claims came from disassembly and which from runtime logs. Doesn't present names that the binary doesn't contain as observed.
+
+Not scored:
+- the 12 s timer in `sendWorkIfPossible`
+- the 51-52 s lifetime cluster (29 of 95)
+
+Techniques exercised:
+- `dyld_info -objc` for selectors
+- shared-cache disassembly
+- ivar offsets from `otool -oV`, matched against `ldrsw` loads
+- correlating `log show` output for launchd, diskarbitrationd and mds
 
 ## swift-fields.py sweep (2026-11-19)
 
