@@ -4,7 +4,7 @@ A Claude Code mod that compacts the conversation while a background command runs
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/usage-dark.svg">
-  <img alt="early-compact usage summary: net waiting time removed, schedule outcomes, compactions per day and how much of each compaction its task hid" src="docs/usage-light.svg" width="920">
+  <img alt="early-compact usage summary: net waiting time removed per week, schedule outcomes, compactions per day and how much of each compaction its task hid" src="docs/usage-light.svg" width="920">
 </picture>
 
 Numbers from one user's transcripts from 2026-10-24 to 2026-11-24, since 0.3.0; see [Usage report](#usage-report) for how they are measured.

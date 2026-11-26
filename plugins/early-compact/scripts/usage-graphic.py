@@ -6,6 +6,7 @@ variant; the README picks one with <picture>.
 """
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif'
@@ -29,6 +30,16 @@ def fmt_min(sec):
 
 def k(n):
     return f'{n / 1000:.0f}k'
+
+
+def span_days(d):
+    """Calendar days from the first to the last scheduled call, inclusive."""
+    return (date.fromisoformat(d['last'][:10]) - date.fromisoformat(d['first'][:10])).days + 1
+
+
+def share(v, total):
+    pct = '<1%' if 0 < v / total < 0.005 else f'{v / total:.0%}'
+    return f'{pct} ({v})'
 
 
 class Svg:
@@ -86,10 +97,10 @@ def by_day(s, d, x, y, w, h):
     series = (('early', 'early', t['early']), ('auto', 'auto', t['auto']), ('manual', 'manual', t['manual']))
     lx = x
     for key, name, col in series:
-        total = sum(c.get(key, 0) for c in days.values())
+        label = f'{name} {sum(c.get(key, 0) for c in days.values()) / span_days(d):.1f}/day'
         s.rect(lx, y + 12, 10, 10, col, r=2)
-        s.text(lx + 15, y + 21, f'{name} {total}', size=11, fill=t['muted'])
-        lx += 15 + 6.5 * len(f'{name} {total}') + 14
+        s.text(lx + 15, y + 21, label, size=11, fill=t['muted'])
+        lx += 15 + 5.6 * len(label) + 10
     top, bottom = y + 36, y + h - 22
     peak = max(sum(c.values()) for c in days.values())
     step = 5 if peak > 12 else 2
@@ -102,6 +113,8 @@ def by_day(s, d, x, y, w, h):
     n = len(days)
     slot = (w - 26) / n
     bw = min(24, slot * 0.6)
+    every = -(-n // 6)  # at most 6 date labels
+    dense = slot < 16
     for i, (day, c) in enumerate(days.items()):
         cx = x + 26 + i * slot + (slot - bw) / 2
         yy = bottom
@@ -113,8 +126,10 @@ def by_day(s, d, x, y, w, h):
             gap = 2 if yy < bottom else 0
             s.vbar(cx, yy - hh, bw, hh - gap, col, cap=(j == len(series) - 1 or not any(c.get(k2, 0) for k2, _, _ in series[j + 1:])))
             yy -= hh
-        s.text(cx + bw / 2, bottom - sum(c.values()) * scale - 5, str(sum(c.values())), size=10, fill=t['muted'], anchor='middle', tabular=True)
-        s.text(cx + bw / 2, bottom + 14, day[5:].replace('-', '/'), size=10, fill=t['faint'], anchor='middle')
+        if not dense:
+            s.text(cx + bw / 2, bottom - sum(c.values()) * scale - 5, str(sum(c.values())), size=10, fill=t['muted'], anchor='middle', tabular=True)
+        if i % every == 0:
+            s.text(cx + bw / 2, bottom + 14, day[5:].replace('-', '/'), size=10, fill=t['faint'], anchor='middle')
 
 
 def outcomes(s, d, x, y, w, h):
@@ -126,18 +141,18 @@ def outcomes(s, d, x, y, w, h):
              ('headless session, gave up', sum(v for k2, v in why.items() if 'headless' in k2)),
              ('superseded by a later call', d['superseded'])]
     rows += [(a, b, t['other']) for a, b in other if b]
-    s.text(x, y, f'How the {d["scheduled"]} schedules ended', size=13, weight=600)
+    s.text(x, y, 'How scheduled compactions ended', size=13, weight=600)
     top = y + 20
     peak = max(v for _, v, _ in rows)
-    label_w = 178
+    label_w = 164
     bar_x = x + label_w
-    scale = (w - label_w - 36) / peak
+    scale = (w - label_w - 62) / peak
     rh = 24
     for i, (name, v, col) in enumerate(rows):
         yy = top + i * (rh + 10)
         s.text(bar_x - 8, yy + 16, name, size=11, fill=t['muted'], anchor='end')
         s.hbar(bar_x, yy, max(v * scale, 3), rh, col)
-        s.text(bar_x + max(v * scale, 3) + 6, yy + 16, str(v), size=11, fill=t['text'], tabular=True)
+        s.text(bar_x + max(v * scale, 3) + 6, yy + 16, share(v, d['scheduled']), size=11, fill=t['text'], tabular=True)
 
 
 def hidden(s, d, x, y, w, h):
@@ -150,16 +165,16 @@ def hidden(s, d, x, y, w, h):
     s.text(x, y, 'Share of a compaction hidden by its task', size=13, weight=600)
     top = y + 20
     peak = max(v for _, v in bins)
-    label_w = 150
+    label_w = 128
     bar_x = x + label_w
-    scale = (w - label_w - 36) / peak
+    scale = (w - label_w - 62) / peak
     rh = 24
     for i, (name, v) in enumerate(bins):
         yy = top + i * (rh + 10)
         s.text(bar_x - 8, yy + 16, name, size=11, fill=t['muted'], anchor='end')
         s.hbar(bar_x, yy, max(v * scale, 3), rh, t['early'])
-        s.text(bar_x + max(v * scale, 3) + 6, yy + 16, str(v), size=11, fill=t['text'], tabular=True)
-    s.text(x, top + 4 * (rh + 10) + 10, f'{d["time"]["fully_hidden"]} of {len(fr)} fully hidden; short tasks cap the rest.',
+        s.text(bar_x + max(v * scale, 3) + 6, yy + 16, share(v, len(fr)), size=11, fill=t['text'], tabular=True)
+    s.text(x, top + 4 * (rh + 10) + 10, f'{d["time"]["fully_hidden"] / len(fr):.0%} fully hidden; short tasks cap the rest.',
            size=11, fill=t['faint'])
 
 
@@ -167,34 +182,39 @@ def draw(d, theme):
     t = THEMES[theme]
     s = Svg(t)
     tm = d['time']
+    days = span_days(d)
+    weekly = lambda sec: fmt_min(sec * 7 / days)
     H = 668
     pad = 28
     # Header
     s.text(pad, 44, 'early-compact in practice', size=22, weight=600)
     s.text(pad, 66,
-           f'{d["scheduled"]} compactions scheduled across {d["projects"]} projects, {d["first"][:10]} to {d["last"][:10]}. '
-           f'Measured from Claude Code transcripts by scripts/usage-report.py.',
+           f'{d["scheduled"] * 7 / days:.0f} compactions scheduled per week across {d["projects"]} projects, '
+           f'{d["first"][:10]} to {d["last"][:10]} ({days} days). Measured from transcripts by scripts/usage-report.py.',
            size=12, fill=t['muted'])
     # Hero + tiles
     y0 = 92
-    hero_w = 250
+    hero_w = 270
     gap = 12
     hero_h = 2 * 96 + gap
     s.rect(pad, y0, hero_w, hero_h, t['early'], r=6)
-    s.text(pad + 16, y0 + 78, fmt_min(tm['net']), size=56, weight=700, fill='#ffffff', tabular=True)
-    s.text(pad + 16, y0 + 106, 'of waiting removed, net', size=14, fill='#ffffff', opacity=0.9)
-    s.text(pad + 16, y0 + 146, f'{tm["net"] / d["compacted"]:.0f}s per early compaction', size=12, fill='#ffffff', opacity=0.8)
-    s.text(pad + 16, y0 + 164, f'{fmt_min(tm["replaced"])} of auto-compaction replaced', size=12, fill='#ffffff', opacity=0.8)
-    s.text(pad + 16, y0 + 182, f'{fmt_min(tm["exposed"])} still waited on', size=12, fill='#ffffff', opacity=0.8)
+    s.text(pad + 16, y0 + 72, weekly(tm['net']), size=56, weight=700, fill='#ffffff', tabular=True)
+    s.text(pad + 16, y0 + 98, 'of waiting removed per week, net', size=14, fill='#ffffff', opacity=0.9)
+    hero_notes = [f'{tm["net"] / d["compacted"]:.0f}s per early compaction',
+                  f'{weekly(tm["replaced"])}/week of auto-compaction replaced',
+                  f'{weekly(tm["exposed"])}/week still waited on',
+                  f'{fmt_min(tm["net"])} in total over {days} days']
+    for i, note in enumerate(hero_notes):
+        s.text(pad + 16, y0 + 132 + i * 18, note, size=12, fill='#ffffff', opacity=0.8)
     tiles = [
-        (f'{d["compacted"]} of {d["scheduled"]}', 'schedules compacted while waiting',
-         f'{d["compacted"] / d["scheduled"]:.0%}; {d["doubles"]} double compactions'),
+        (f'{d["compacted"] / d["scheduled"]:.0%}', 'of schedules compacted while waiting',
+         f'{d["compacted"]} of {d["scheduled"]}; {d["doubles"] / d["compacted"]:.1%} double compactions'),
         (f'{tm["hidden"] / tm["total"]:.0%}', 'of compaction time hidden behind a task',
          f'{fmt_min(tm["hidden"])} of {fmt_min(tm["total"])}'),
         (f'{d["early"]["dur"]:.0f}s vs {d["auto"]["dur"]:.0f}s', 'median early vs auto-compaction',
          f'early {k(d["early"]["pre"])} to {k(d["early"]["post"])} tokens, auto {k(d["auto"]["pre"])} to {k(d["auto"]["post"])}'),
         (f'{tm["equiv_med"]:.2f}', 'auto cycles replaced per early compaction',
-         f'{d["early"]["count"]} early vs {d["auto_mod"]["count"]} auto in the same sessions'),
+         f'{d["early"]["count"] / d["auto_mod"]["count"]:.1f} early per auto in the same sessions'),
     ]
     tw = (W - 2 * pad - hero_w - gap * 2) / 2
     for i, (v, l, n) in enumerate(tiles):
@@ -211,8 +231,8 @@ def draw(d, theme):
            'times the median auto duration)',
            size=10.5, fill=t['faint'])
     s.text(pad, H - 21,
-           f'minus compaction time nobody was waiting on anyway. {d["reminders"]} threshold reminders were sent; {d["missed"]} slow '
-           f'foreground commands were missed chances. Generated {d["generated"][:10]}.',
+           f'minus compaction time nobody was waiting on anyway. Per week: {d["reminders"] * 7 / days:.0f} threshold reminders sent, '
+           f'{d["missed"] * 7 / days:.0f} slow foreground commands that were missed chances. Generated {d["generated"][:10]}.',
            size=10.5, fill=t['faint'])
     return s.render(H)
 
